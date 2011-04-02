@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: atomickit
+Description: Atomic Kit: functions for speed-conscious atomic datatypes
+Version: @ATOMICKIT_VERSION@
+Libs: -L${libdir} -latomickit -lpthread
+Cflags: -I${includedir} -I${includedir}/@HOST_ARCH@
