@@ -37,6 +37,7 @@
 #ifndef _ATOMICKIT_ATOMIC_LIST_H
 #define _ATOMICKIT_ATOMIC_LIST_H
 
+#include <sys/types.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <pthread.h>
@@ -59,7 +60,8 @@ struct atomic_list {
 #define ALST_UNMARK(p)						\
     ((__typeof__(p)) (((intptr_t) (p)) & (~ ((intptr_t) 0x1))))
 
-#define ALST_ERROR ((void *) (~ ((intptr_t) 0x1)))
+#define ALST_ERROR ((void *) (~ ((intptr_t) 0x5555)))
+#define ALST_EMPTY ((void *) (~ ((intptr_t) 0xAAA9)))
 
 /* nonatomic read functions -- should be *fast* */
 /* *must* acquire the read lock before using */
@@ -125,6 +127,7 @@ int atomic_list_unshift(atomic_list_t *list, void *item);
 void *atomic_list_shift(atomic_list_t *list);
 int atomic_list_insert(atomic_list_t *list, off_t index, void *item);
 void *atomic_list_remove(atomic_list_t *list, off_t index);
+int atomic_list_remove_by_value(atomic_list_t *list, void *item);
 int atomic_list_clear(atomic_list_t *list);
 int atomic_list_init(atomic_list_t *list);
 int atomic_list_destroy(atomic_list_t *list);

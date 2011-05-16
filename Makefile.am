@@ -33,3 +33,9 @@ nodist_libatomickitarchinclude_HEADERS = include/atomickit/arch/arch.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
+
+check_PROGRAMS = test
+test_SOURCES = src/test.c
+test_LDFLAGS = $(LD_FLAGS) -latomickit
+test_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
+TESTS = test

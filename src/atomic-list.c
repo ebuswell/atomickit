@@ -153,6 +153,13 @@ void *atomic_list_pop(atomic_list_t *list) {
     }
     /* Get current list_ptr */
     old_list_ptr = atomic_ptr_read(&list->list_ptr);
+    if(ALST_UNMARK(old_list_ptr)->length == 0) {
+	r = pthread_mutex_unlock(&list->mutex);
+	if(r != 0) {
+	    return ALST_ERROR;
+	}
+	return ALST_EMPTY;
+    }
     /* allocate new list and copy data */
     new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
     if(new_list_ptr == NULL) {
@@ -215,6 +222,13 @@ void *atomic_list_shift(atomic_list_t *list) {
     }
     /* Get current list_ptr */
     old_list_ptr = atomic_ptr_read(&list->list_ptr);
+    if(ALST_UNMARK(old_list_ptr)->length == 0) {
+	r = pthread_mutex_unlock(&list->mutex);
+	if(r != 0) {
+	    return ALST_ERROR;
+	}
+	return ALST_EMPTY;
+    }
     /* allocate new list and copy data */
     new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
     if(new_list_ptr == NULL) {
@@ -313,6 +327,56 @@ void *atomic_list_remove(atomic_list_t *list, off_t index) {
     free(old_list_ptr);
 
     return ret;
+}
+
+int atomic_list_remove_by_value(atomic_list_t *list, void *value) {
+    struct atomic_list *old_list_ptr;
+    struct atomic_list *new_list_ptr;
+    /* Acquire write lock */
+    int r;
+    r = pthread_mutex_lock(&list->mutex);
+    if(r != 0) {
+	return -1;
+    }
+    /* Get current list_ptr */
+    old_list_ptr = atomic_ptr_read(&list->list_ptr);
+    if(ALST_UNMARK(old_list_ptr)->length == 0) {
+	return 0;
+    }
+    /* count the occurrences of value in list */
+    size_t count = 0;
+    void **ary = ALST_UNMARK(old_list_ptr)->list;
+    size_t length = ALST_UNMARK(old_list_ptr)->length;
+    size_t i;
+    for(i = 0; i < length; i++) {
+	if(ary[i] == value) {
+	    count++;
+	}
+    }
+    if(count == 0) {
+	return 0;
+    }
+    /* allocate new list and copy data */
+    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - count));
+    if(new_list_ptr == NULL) {
+	pthread_mutex_unlock(&list->mutex);
+	return -1;
+    }
+    size_t j = 0;
+    void **newary = new_list_ptr->list;
+    for(i = 0; i < length; i++) {
+	if(ary[i] != value) {
+	    newary[j++] = ary[i];
+	}
+    }
+    new_list_ptr->length = length - count;
+    /* Exchange new and old lists and clean up */
+    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
+    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
+					 * ignore return value */
+    free(old_list_ptr);
+
+    return 0;
 }
 
 int atomic_list_clear(atomic_list_t *list) {
@@ -424,8 +488,7 @@ void *atomic_list_first(atomic_list_t *list) {
 	if(r != 0) {
 	    return ALST_ERROR;
 	}
-	errno = EFAULT;
-	return ALST_ERROR;
+	return ALST_EMPTY;
     } else {
 	ret = list_ptr->list[0];
     }
@@ -454,8 +517,7 @@ void *atomic_list_last(atomic_list_t *list) {
 	if(r != 0) {
 	    return ALST_ERROR;
 	}
-	errno = EFAULT;
-	return ALST_ERROR;
+	return ALST_EMPTY;
     } else {
 	ret = list_ptr->list[list_ptr->length - 1];
     }

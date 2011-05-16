@@ -61,7 +61,7 @@ AS_CASE([$host_cpu],
 headers for your architecture you should be able to fix this.  The Linux Kernel is a good
 place to start.])])
 
-HOST_ARCH=$host
+HOST_ARCH=$host_cpu-$host_os
 AC_SUBST(HOST_ARCH)
 
 # Checks for header files.
