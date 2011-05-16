@@ -30,7 +30,7 @@ AC_PREREQ([2.65])
 AC_INIT([atomickit], ATOMICKIT_VERSION, [ebuswell@gmail.com])
 AM_INIT_AUTOMAKE([-Wall foreign])
 AC_CONFIG_SRCDIR([src/atomic-list.c])
-AC_CONFIG_HEADERS([include/config.h include/atomickit/arch/arch.h])
+AC_CONFIG_HEADERS([src/config.h include/atomickit/arch/arch.h])
 AC_CANONICAL_HOST
 
 VERSION_INFO=ATOMICKIT_INTERFACE_REVISION:ATOMICKIT_SOURCE_REVISION:ATOMICKIT_INTERFACE_BACK_COMPATABILITY
