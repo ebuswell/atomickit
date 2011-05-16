@@ -416,6 +416,7 @@ int atomic_list_init(atomic_list_t *list) {
     if(list_ptr == NULL) {
 	return -1;
     }
+    list_ptr->length = 0;
     atomic_ptr_set(&list->list_ptr, list_ptr);
 
     r = pthread_mutex_init(&list->mutex, NULL);
