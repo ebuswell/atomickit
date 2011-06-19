@@ -45,7 +45,7 @@ char *test_string3 = "Test String 3";
 	    exit(1);						\
 	}							\
 	if(test_return != expected) {				\
-	    printf("Error: received unexpected value\n");	\
+	    printf("Error: received unexpected value \"%s\" (expected \"%s\")\n", (char *) test_return, (char *) expected); \
 	    exit(1);						\
 	}							\
     } while(0)
@@ -62,7 +62,7 @@ char *test_string3 = "Test String 3";
 	    exit(1);						\
 	}							\
 	if(test_return != expected) {				\
-	    printf("Error: received unexpected value\n");	\
+	    printf("Error: received unexpected value \"%s\" (expected \"%s\")\n", (char *) test_return, (char *) expected); \
 	    exit(1);						\
 	}							\
     } while(0)
@@ -78,11 +78,7 @@ char *test_string3 = "Test String 3";
 
 #define CHECK_PUT2(function, index, value)	\
     do {					\
-	r = function(&list, index, value);	\
-	if(r != 0) {				\
-	    perror("Error: ");			\
-	    exit(1);				\
-	}					\
+	function(&list, index, value);		\
     } while(0)
 
 #define CHECK_LENGTH(expected)						\
@@ -104,6 +100,7 @@ int main(int argc, char **argv) {
     size_t length;
 
     atomic_list_t list;
+    setbuf(stdout, NULL);
     CHECKING(atomic_list_init);
     r = atomic_list_init(&list);
     if(r != 0) {
@@ -183,22 +180,14 @@ int main(int argc, char **argv) {
     OK();
 
     CHECKING(atomic_list_remove_by_value);
-    r = atomic_list_remove_by_value(&list, test_string2);
-    if(r != 0) {
-	perror("Error: ");
-	exit(1);
-    }
+    atomic_list_remove_by_value(&list, test_string2);
     CHECK_LENGTH(2);
     CHECK_GET(atomic_list_first, test_string1);
     CHECK_GET(atomic_list_last, test_string3);
-    OK();    
+    OK();
 
     CHECKING(atomic_list_clear);
-    r = atomic_list_clear(&list);
-    if(r != 0) {
-	perror("Error: ");
-	exit(1);
-    }
+    atomic_list_clear(&list);
     CHECK_LENGTH(0);
     OK();
 
@@ -237,11 +226,7 @@ int main(int argc, char **argv) {
     OK();
 
     CHECKING(atomic_list_destroy);
-    r = atomic_list_destroy(&list);
-    if(r != 0) {
-	perror("Error: ");
-	exit(1);
-    }
+    atomic_list_destroy(&list);
     OK();
 
     exit(0);

@@ -17,558 +17,374 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <stdlib.h>
+#define _GNU_SOURCE
+#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
-#include <pthread.h>
-#include <sched.h>
-#include <errno.h>
+#include "atomickit/spinlock.h"
 #include "atomickit/atomic-list.h"
-#include "atomickit/atomic-ptr.h"
 
-#define ALST_OUT_OF_BOUNDS(length, index)	\
-    ((((size_t) index) >= (length)) || ((index) < 0))
+#define atomic_list_lock(list) spinlock_lock(&((list)->lock))
+#define atomic_list_unlock(list) atomic_list_readunlock(list)
+#define ALST_DEFAULT_CAPACITY 10
 
-#define XCHG_WHEN_UNMARKED(list, old, new)				\
-    do {								\
-	while(ALST_MARKED(old)) {					\
-	    sched_yield(); /* don't check return value; spin on error */ \
-	    old = atomic_ptr_read(&(list)->list_ptr);			\
-	}								\
-    } while(atomic_ptr_cmpxchg(&(list)->list_ptr, old, new) != old)
-
-#define ALST_SIZE(n) (sizeof(struct atomic_list) + ((n) - 1) * sizeof(void *))
-
-int atomic_list_replace(atomic_list_t *list, void **item_ary, size_t length) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return r;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(length));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
+static inline void invalidate_iterators(atomic_list_t *list) {
+    if(list->iterators != NULL) {
+	size_t **ary = (size_t **) nonatomic_list_ary(list->iterators);
+	size_t i;
+	for(i = 0; i < nonatomic_list_length(list->iterators); i++) {
+	    *ary[i] = SIZE_MAX;
 	}
+    }
+}
+
+static inline void decrement_iterators(atomic_list_t *list, off_t index) {
+    if(list->iterators != NULL) {
+	size_t **ary = (size_t **) nonatomic_list_ary(list->iterators);
+	size_t i;
+	for(i = 0; i < nonatomic_list_length(list->iterators); i++) {
+	    if(*ary[i] > (size_t) index) {
+		(*ary[i])--;
+	    }
+	}
+    }
+}
+
+static inline void increment_iterators(atomic_list_t *list, off_t index) {
+    if(list->iterators != NULL) {
+	size_t **ary = (size_t **) nonatomic_list_ary(list->iterators);
+	size_t i;
+	for(i = 0; i < nonatomic_list_length(list->iterators); i++) {
+	    if(*ary[i] != SIZE_MAX && *ary[i] > (size_t) index) {
+		(*ary[i])++;
+	    }
+	}
+    }
+}
+
+static inline int atomic_list_init_internal(atomic_list_t *list, size_t initial_capacity, bool init_iterators) {
+    list->list_ptr = malloc(sizeof(void *) * initial_capacity);
+    if(list->list_ptr == NULL) {
 	return -1;
     }
-    memcpy(new_list_ptr->list, item_ary, sizeof(void *) * length);
-    new_list_ptr->length = length;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
+    if(init_iterators) {
+	list->iterators = malloc(sizeof(atomic_list_t));
+	if(list->iterators == NULL) {
+	    free(list->list_ptr);
+	    return -1;
+	}
+	int r = atomic_list_init_internal(list->iterators, ALST_DEFAULT_CAPACITY, false);
+	if(r != 0) {
+	    free(list->iterators);
+	    free(list->list_ptr);
+	    return r;
+	}
+    } else {
+	list->iterators = NULL;
+    }
 
+    list->capacity = initial_capacity;
+    list->length = 0;
+    spinlock_init(&list->lock);
     return 0;
 }
 
-int atomic_list_set(atomic_list_t *list, off_t index, void *item) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
+
+int atomic_list_init_with_capacity(atomic_list_t *list, size_t initial_capacity) {
+    return atomic_list_init_internal(list, initial_capacity, true);
+}
+
+int atomic_list_init(atomic_list_t *list) {
+    return atomic_list_init_internal(list, ALST_DEFAULT_CAPACITY, true);
+}
+
+void atomic_list_destroy(atomic_list_t *list) {
+    atomic_list_lock(list);
+    if(list->iterators != NULL) {
+	atomic_list_destroy(list->iterators);
+	free(list->iterators);
+	list->iterators = NULL;
+    }
+    if(list->list_ptr != NULL) {
+	free(list->list_ptr);
+	list->list_ptr = NULL;
+    }
+    list->capacity = 0;
+    list->length = 0;
+    atomic_list_unlock(list);
+}
+
+static inline int atomic_list_compact_internal(atomic_list_t *list) {
+    if(list->length != list->capacity) {
+	void **new_list = realloc(list->list_ptr, sizeof(void *) * list->length);
+	if(new_list == NULL) {
+	    atomic_list_unlock(list);
+	    return -1;
+	}
+	list->list_ptr = new_list;
+	list->capacity = list->length;
+    }
+    if(list->iterators != NULL) {
+	int r = atomic_list_compact(list->iterators);
+	atomic_list_unlock(list);
 	return r;
     }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* Check bounds */
-    if(ALST_OUT_OF_BOUNDS(ALST_UNMARK(old_list_ptr)->length, index)) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
+    return 0;
+}
+
+int atomic_list_compact(atomic_list_t *list) {
+    atomic_list_lock(list);
+    atomic_list_compact_internal(list);
+    atomic_list_unlock(list);
+    return 0;
+}
+
+int atomic_list_prealloc(atomic_list_t *list, size_t capacity) {
+    atomic_list_lock(list);
+    if(list->capacity < capacity) {
+	void **new_list = realloc(list->list_ptr, sizeof(void *) * capacity);
+	if(new_list == NULL) {
+	    atomic_list_unlock(list);
+	    return -1;
 	}
+	list->list_ptr = new_list;
+	list->capacity = capacity;
+    }
+    atomic_list_unlock(list);
+    return 0;
+}
+
+/* Assume we're already locked */
+static int ensure_capacity(atomic_list_t *list, size_t capacity) {
+    size_t new_capacity = list->capacity;
+    while(capacity > new_capacity) {
+	/* Increase by half of current capacity */
+	new_capacity = new_capacity + (new_capacity >> 1);
+    }
+    void **new_list = realloc(list->list_ptr, sizeof(void *) * new_capacity);
+    if(new_list == NULL) {
+	return -1;
+    }
+    list->list_ptr = new_list;
+    list->capacity = new_capacity;
+    return 0;
+}
+
+void **atomic_list_checkout(atomic_list_t *list) {
+    atomic_list_lock(list);
+    int r = atomic_list_compact_internal(list);
+    if(r != 0) {
+	atomic_list_unlock(list);
+	return NULL;
+    }
+    return list->list_ptr;
+}
+
+void atomic_list_checkin(atomic_list_t *list, void **ary, size_t length) {
+    list->list_ptr = ary;
+    list->capacity = length;
+    list->length = length;
+    invalidate_iterators(list);
+    atomic_list_unlock(list);
+}
+
+int atomic_list_set(atomic_list_t *list, off_t index, void *item) {
+    atomic_list_lock(list);
+    if(ALST_OUT_OF_BOUNDS(list->length, index)) {
+	atomic_list_unlock(list);
 	errno = EFAULT;
 	return -1;
     }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
-	}
-	return -1;
-    }
-    memcpy(new_list_ptr, ALST_UNMARK(old_list_ptr), ALST_SIZE(ALST_UNMARK(old_list_ptr)->length));
-    new_list_ptr->list[index] = item;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    list->list_ptr[index] = item;
+    atomic_list_unlock(list);
     return 0;
 }
 
 int atomic_list_push(atomic_list_t *list, void *item) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     int r;
-    r = pthread_mutex_lock(&list->mutex);
+    atomic_list_lock(list);
+    r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
+	atomic_list_unlock(list);
 	return r;
     }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length + 1));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
-	}
-	return -1;
-    }
-    memcpy(new_list_ptr, ALST_UNMARK(old_list_ptr), ALST_SIZE(ALST_UNMARK(old_list_ptr)->length));
-    new_list_ptr->list[ALST_UNMARK(old_list_ptr)->length] = item;
-    new_list_ptr->length++;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    list->list_ptr[list->length++] = item;
+    atomic_list_unlock(list);
     return 0;
 }
 
 void *atomic_list_pop(atomic_list_t *list) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     void *ret;
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    if(ALST_UNMARK(old_list_ptr)->length == 0) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
+    atomic_list_lock(list);
+    if(list->length == 0) {
 	return ALST_EMPTY;
     }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
-    if(new_list_ptr == NULL) {
-	pthread_mutex_unlock(&list->mutex);
-	return ALST_ERROR;
-    }
-    memcpy(new_list_ptr, ALST_UNMARK(old_list_ptr), ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
-    ret = ALST_UNMARK(old_list_ptr)->list[ALST_UNMARK(old_list_ptr)->length - 1];
-    new_list_ptr->length--;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    ret = list->list_ptr[--list->length];
+    atomic_list_unlock(list);
     return ret;
 }
 
 int atomic_list_unshift(atomic_list_t *list, void *item) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     int r;
-    r = pthread_mutex_lock(&list->mutex);
+    atomic_list_lock(list);
+    r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
+	atomic_list_unlock(list);
 	return r;
     }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length + 1));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
-	}
-	return -1;
-    }
-    memcpy(new_list_ptr->list + 1, ALST_UNMARK(old_list_ptr)->list, sizeof(void *) * ALST_UNMARK(old_list_ptr)->length);
-    new_list_ptr->list[0] = item;
-    new_list_ptr->length = ALST_UNMARK(old_list_ptr)->length + 1;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    memmove(list->list_ptr + 1, list->list_ptr, list->length++ * sizeof(void *));
+    list->list_ptr[0] = item;
+    increment_iterators(list, 0);
+    atomic_list_unlock(list);
     return 0;
 }
 
 void *atomic_list_shift(atomic_list_t *list) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     void *ret;
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    if(ALST_UNMARK(old_list_ptr)->length == 0) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
+    atomic_list_lock(list);
+    if(list->length == 0) {
 	return ALST_EMPTY;
     }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	return ALST_ERROR;
-    }
-    memcpy(new_list_ptr->list, ALST_UNMARK(old_list_ptr)->list + 1, sizeof(void *) * (ALST_UNMARK(old_list_ptr)->length - 1));
-    ret = ALST_UNMARK(old_list_ptr)->list[0];
-    new_list_ptr->length = ALST_UNMARK(old_list_ptr)->length - 1;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    ret = list->list_ptr[0];
+    memmove(list->list_ptr, list->list_ptr + 1, --list->length * sizeof(void *));
+    decrement_iterators(list, 0);
+    atomic_list_unlock(list);
     return ret;
 }
 
 int atomic_list_insert(atomic_list_t *list, off_t index, void *item) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return r;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* Check bounds */
-    if(ALST_OUT_OF_BOUNDS(ALST_UNMARK(old_list_ptr)->length + 1, index)) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
-	}
+    atomic_list_lock(list);
+    if(ALST_OUT_OF_BOUNDS(list->length + 1, index)) {
+	atomic_list_unlock(list);
 	errno = EFAULT;
 	return -1;
     }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length + 1));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
-	}
-	return -1;
+    r = ensure_capacity(list, list->length + 1);
+    if(r != 0) {
+	atomic_list_unlock(list);
+	return r;
     }
-    memcpy(new_list_ptr, ALST_UNMARK(old_list_ptr), ALST_SIZE(index));
-    memcpy(new_list_ptr->list + index + 1, ALST_UNMARK(old_list_ptr)->list + index, sizeof(void *) * (ALST_UNMARK(old_list_ptr)->length - index));
-    new_list_ptr->list[index] = item;
-    new_list_ptr->length++;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    memmove(list->list_ptr + index + 1, list->list_ptr + index, (list->length++ - index) * sizeof(void *));
+    list->list_ptr[index] = item;
+    increment_iterators(list, index);
+    atomic_list_unlock(list);
     return 0;
 }
 
 void *atomic_list_remove(atomic_list_t *list, off_t index) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
     void *ret;
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* Check bounds */
-    if(ALST_OUT_OF_BOUNDS(ALST_UNMARK(old_list_ptr)->length, index)) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
+    atomic_list_lock(list);
+    if(ALST_OUT_OF_BOUNDS(list->length + 1, index)) {
+	atomic_list_unlock(list);
 	errno = EFAULT;
 	return ALST_ERROR;
     }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - 1));
-    if(new_list_ptr == NULL) {
-	pthread_mutex_unlock(&list->mutex);
-	return NULL;
-    }
-    memcpy(new_list_ptr, ALST_UNMARK(old_list_ptr), ALST_SIZE(index));
-    memcpy(new_list_ptr->list + index, ALST_UNMARK(old_list_ptr)->list + index + 1, sizeof(void *) * (ALST_UNMARK(old_list_ptr)->length - index));
-    ret = ALST_UNMARK(old_list_ptr)->list[index];
-    new_list_ptr->length--;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    ret = list->list_ptr[index];
+    memmove(list->list_ptr + index, list->list_ptr + index + 1, (--list->length - index) * sizeof(void *));
+    decrement_iterators(list, index);
+    atomic_list_unlock(list);
     return ret;
 }
 
-int atomic_list_remove_by_value(atomic_list_t *list, void *value) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return -1;
-    }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    if(ALST_UNMARK(old_list_ptr)->length == 0) {
-	return 0;
-    }
-    /* count the occurrences of value in list */
-    size_t count = 0;
-    void **ary = ALST_UNMARK(old_list_ptr)->list;
-    size_t length = ALST_UNMARK(old_list_ptr)->length;
+void atomic_list_remove_by_value(atomic_list_t *list, void *value) {
     size_t i;
-    for(i = 0; i < length; i++) {
-	if(ary[i] == value) {
-	    count++;
+    atomic_list_lock(list);
+    for(i = 0; i < list->length; i++) {
+	if(list->list_ptr[i] == value) {
+	    memmove(list->list_ptr + i, list->list_ptr + i + 1, (--list->length - i) * sizeof(void *));
+	    decrement_iterators(list, i);
 	}
     }
-    if(count == 0) {
-	return 0;
-    }
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(ALST_UNMARK(old_list_ptr)->length - count));
-    if(new_list_ptr == NULL) {
-	pthread_mutex_unlock(&list->mutex);
-	return -1;
-    }
-    size_t j = 0;
-    void **newary = new_list_ptr->list;
-    for(i = 0; i < length; i++) {
-	if(ary[i] != value) {
-	    newary[j++] = ary[i];
-	}
-    }
-    new_list_ptr->length = length - count;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
-    return 0;
+    atomic_list_unlock(list);
 }
 
-int atomic_list_clear(atomic_list_t *list) {
-    struct atomic_list *old_list_ptr;
-    struct atomic_list *new_list_ptr;
-    /* Acquire write lock */
+void atomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *)) {
+    size_t i;
+    atomic_list_lock(list);
+    for(i = 0; i < list->length; i++) {
+	if(grep(list->list_ptr[i])) {
+	    memmove(list->list_ptr + i, list->list_ptr + i + 1, (--list->length - i) * sizeof(void *));
+	    decrement_iterators(list, i);
+	}
+    }
+    atomic_list_unlock(list);
+}
+
+void atomic_list_reverse(atomic_list_t *list) {
+    atomic_list_lock(list);
+    size_t i;
+    for(i = 0; i < (list->length >> 1); i++) {
+	register void *tmp;
+	tmp = list->list_ptr[i];
+	list->list_ptr[i] = list->list_ptr[list->length - 1 - i];
+	list->list_ptr[list->length - 1 - i] = tmp;
+    }
+    invalidate_iterators(list);
+    atomic_list_unlock(list);
+}
+
+static int compar_internal(const void *a, const void *b, void *arg) {
+    int(*compar)(void *, void *) = (int(*)(void *, void *)) arg;
+    void **_a = (void **) a;
+    void **_b = (void **) b;
+    return compar(_a, _b);
+}
+
+void atomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *)) {
+    atomic_list_lock(list);
+    qsort_r(list->list_ptr, list->length, sizeof(void *), compar_internal, (void *) compar);
+    invalidate_iterators(list);
+    atomic_list_unlock(list);
+}
+
+int atomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item) {
     int r;
-    r = pthread_mutex_lock(&list->mutex);
+    atomic_list_lock(list);
+    r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
+	atomic_list_unlock(list);
 	return r;
     }
-    /* Get current list_ptr */
-    old_list_ptr = atomic_ptr_read(&list->list_ptr);
-    /* allocate new list and copy data */
-    new_list_ptr = malloc(ALST_SIZE(0));
-    if(new_list_ptr == NULL) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return r;
+    size_t max = list->length;
+    size_t min = 0;
+    size_t i = 0;
+    while(min < max) {
+	i = (max + min) >> 1;
+	r = compar(item, list->list_ptr[i]);
+	if(r < 0) {
+	    max = i;
+	} else if(r > 0) {
+	    min = i + 1;
+	} else {
+	    break;
 	}
-	return -1;
     }
-    new_list_ptr->length = 0;
-    /* Exchange new and old lists and clean up */
-    XCHG_WHEN_UNMARKED(list, old_list_ptr, new_list_ptr);
-    pthread_mutex_unlock(&list->mutex); /* Call already succeeded:
-					 * ignore return value */
-    free(old_list_ptr);
-
+    memmove(list->list_ptr + i, list->list_ptr + i + 1, (list->length++ - i) * sizeof(void *));
+    list->list_ptr[i] = item;
+    increment_iterators(list, i);
+    atomic_list_unlock(list);
     return 0;
 }
 
-int atomic_list_init(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
-    int r;
-    list_ptr = malloc(ALST_SIZE(0));
-    if(list_ptr == NULL) {
-	return -1;
-    }
-    list_ptr->length = 0;
-    atomic_ptr_set(&list->list_ptr, list_ptr);
-
-    r = pthread_mutex_init(&list->mutex, NULL);
-    if(r != 0) {
-	return r;
-    }
-
-    return 0;
+void atomic_list_clear(atomic_list_t *list) {
+    atomic_list_lock(list);
+    list->length = 0;
+    atomic_list_unlock(list);
 }
 
-int atomic_list_destroy(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
+int atomic_iterator_init(atomic_list_t *list, atomic_iterator_t *iterator) {
     int r;
-    r = pthread_mutex_destroy(&list->mutex);
-    if(r != 0) {
-	return r;
-    }
-
-    list_ptr = ALST_UNMARK(atomic_ptr_xchg(&list->list_ptr, NULL));
-    if(list_ptr != NULL) {
-	free(list_ptr);
-    }
-    
-    return 0;
+    atomic_list_readlock(list);
+    *iterator = 0;
+    r = atomic_list_push(list->iterators, iterator);
+    atomic_list_readunlock(list);
+    return r;
 }
 
-void *atomic_list_get(atomic_list_t *list, off_t index) {
-    struct atomic_list *list_ptr;
-    void *ret;
-    /* Acquire write lock to prevent writing */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    list_ptr = ALST_UNMARK((struct atomic_list *) atomic_ptr_read(&list->list_ptr));
-    if(ALST_OUT_OF_BOUNDS(list_ptr->length, index)) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
-	errno = EFAULT;
-	return ALST_ERROR;
-    }
-
-    ret = list_ptr->list[index];
-
-    r = pthread_mutex_unlock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    return ret;
-}
-
-void *atomic_list_first(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
-    void *ret;
-    /* Acquire write lock to prevent writing */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    list_ptr = ALST_UNMARK((struct atomic_list *) atomic_ptr_read(&list->list_ptr));
-    if(list_ptr->length == 0) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
-	return ALST_EMPTY;
-    } else {
-	ret = list_ptr->list[0];
-    }
-
-    r = pthread_mutex_unlock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    return ret;
-}
-
-void *atomic_list_last(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
-    void *ret;
-    /* Acquire write lock to prevent writing */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    list_ptr = ALST_UNMARK((struct atomic_list *) atomic_ptr_read(&list->list_ptr));
-    if(list_ptr->length == 0) {
-	r = pthread_mutex_unlock(&list->mutex);
-	if(r != 0) {
-	    return ALST_ERROR;
-	}
-	return ALST_EMPTY;
-    } else {
-	ret = list_ptr->list[list_ptr->length - 1];
-    }
-
-    r = pthread_mutex_unlock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    return ret;
-}
-
-void **atomic_list_ary(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
-    void *ret;
-    /* Acquire write lock to prevent writing */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    list_ptr = ALST_UNMARK((struct atomic_list *) atomic_ptr_read(&list->list_ptr));
-    ret = list_ptr->list;
-
-    r = pthread_mutex_unlock(&list->mutex);
-    if(r != 0) {
-	return ALST_ERROR;
-    }
-
-    return ret;
-}
-
-size_t atomic_list_length(atomic_list_t *list) {
-    struct atomic_list *list_ptr;
-    size_t ret;
-    /* Acquire write lock to prevent writing */
-    int r;
-    r = pthread_mutex_lock(&list->mutex);
-    if(r != 0) {
-	return -1;
-    }
-
-    list_ptr = ALST_UNMARK((struct atomic_list *) atomic_ptr_read(&list->list_ptr));
-    ret = list_ptr->length;
-
-    r = pthread_mutex_unlock(&list->mutex);
-    if(r != 0) {
-	return -1;
-    }
-
-    return ret;
+void atomic_iterator_destroy(atomic_list_t *list, atomic_iterator_t *iterator) {
+    atomic_list_readlock(list);
+    *iterator = SIZE_MAX;
+    atomic_list_remove_by_value(list->iterators, iterator);
+    atomic_list_readunlock(list);
 }

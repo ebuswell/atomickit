@@ -17,13 +17,12 @@
 # along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
 
 MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing src/config.h.in~
-EXTRA_DIST = autogen.sh Doxyfile
+EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign
 
 lib_LTLIBRARIES = libatomickit.la
 libatomickit_la_SOURCES = src/atomic-list.c
-libatomickit_la_LIBADD = $(LDFLAGS)
-libatomickit_la_LDFLAGS = -export-dynamic -version_info @VERSION_INFO@
+libatomickit_la_LDFLAGS = $(LDFLAGS) -export-dynamic -version_info @VERSION_INFO@
 libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
@@ -36,6 +35,7 @@ nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = test
 test_SOURCES = src/test.c
-test_LDFLAGS = $(LD_FLAGS) -latomickit
+test_LDADD = -latomickit
+test_LDFLAGS = $(LD_FLAGS)
 test_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 TESTS = test
