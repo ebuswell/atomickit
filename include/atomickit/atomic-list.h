@@ -122,9 +122,14 @@ void atomic_iterator_destroy(atomic_list_t *list, atomic_iterator_t *iterator);
 static inline void *atomic_iterator_next(atomic_list_t *list, atomic_iterator_t *iterator) {
     void *ret;
     atomic_list_readlock(list);
-    ret = nonatomic_list_get(list, (*iterator)++);
+    if(ALST_OUT_OF_BOUNDS(list->length, *iterator)) {
+	*iterator = SIZE_MAX;
+	ret = ALST_EMPTY;
+    } else {
+	ret = nonatomic_list_get(list, (*iterator)++);
+    }
     atomic_list_readunlock(list);
-    return ret == ALST_ERROR ? ALST_EMPTY : ret;
+    return ret;
 }
 
 int atomic_list_init(atomic_list_t *list);
@@ -132,6 +137,9 @@ int atomic_list_init_with_capacity(atomic_list_t *list, size_t initial_capacity)
 void atomic_list_destroy(atomic_list_t *list);
 int atomic_list_compact(atomic_list_t *list);
 int atomic_list_prealloc(atomic_list_t *list, size_t size);
+
+char *atomic_list_to_string(atomic_list_t *list, char *(*item_to_string)(void *, int));
+char *atomic_list_to_string_indent(atomic_list_t *list, int indentlevel, char *(*item_to_string)(void *, int));
 
 /* Write functions */
 void **atomic_list_checkout(atomic_list_t *list);

@@ -26,7 +26,7 @@ libatomickit_la_LDFLAGS = $(LDFLAGS) -export-dynamic -version_info @VERSION_INFO
 libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
-libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-long.h include/atomickit/atomic-ptr.h include/atomickit/atomic-types.h include/atomickit/atomic-list.h
+libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-long.h include/atomickit/atomic-ptr.h include/atomickit/atomic-types.h include/atomickit/atomic-list.h include/atomickit/spinlock.h
 libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/atomic.h include/@HOST_ARCH_SRC@/atomickit/arch/atomic-float.h include/@HOST_ARCH_SRC@/atomickit/arch/atomic-types.h
 nodist_libatomickitarchinclude_HEADERS = include/atomickit/arch/arch.h
 
