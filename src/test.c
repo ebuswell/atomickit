@@ -168,11 +168,6 @@ static char *my_strdup(void * str, int dummy) {
 #define CHECK_LENGTH(expected)						\
     do {								\
 	length = atomic_list_length(&list);				\
-	if(r == -1) {							\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
 	if(length != expected) {					\
 	    printf("Error at line %i: expected length %zd, found length %zd\n", __LINE__, (size_t) expected, length); \
 	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
@@ -644,7 +639,13 @@ int main(int argc, char **argv) {
     OK();
 
     CHECKING(atomic_list_to_string);
-    printf("\n%s\n", atomic_list_to_string(&list, my_strdup));
+    char *str = atomic_list_to_string(&list, my_strdup);
+    if(str == NULL) {
+	perror(my_sprintf("Error at line %i", __LINE__));
+	exit(1);
+    }
+    printf("\n%s\n", str);
+    free(str);
     OK();
 
     CHECKING(atomic_list_destroy);
