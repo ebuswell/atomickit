@@ -73,13 +73,19 @@ static inline size_t nonatomic_list_length(atomic_list_t *list) {
     return list->length;
 }
 
+static inline void atomic_list_lock(atomic_list_t *list) {
+    spinlock_lock(&list->lock);
+}
+
+static inline void atomic_list_unlock(atomic_list_t *list) {
+    spinlock_unlock(&list->lock);
+}
+
 static inline void atomic_list_readlock(atomic_list_t *list) {
     spinlock_multilock(&list->lock);
 }
 
-static inline void atomic_list_readunlock(atomic_list_t *list) {
-    spinlock_unlock(&list->lock);
-}
+#define atomic_list_readunlock(list) atomic_list_unlock(list)
 
 static inline void *atomic_list_get(atomic_list_t *list, off_t index) {
     void *ret;
@@ -135,7 +141,9 @@ static inline void *atomic_iterator_next(atomic_list_t *list, atomic_iterator_t 
 int atomic_list_init(atomic_list_t *list);
 int atomic_list_init_with_capacity(atomic_list_t *list, size_t initial_capacity);
 void atomic_list_destroy(atomic_list_t *list);
+int nonatomic_list_compact(atomic_list_t *list);
 int atomic_list_compact(atomic_list_t *list);
+int nonatomic_list_prealloc(atomic_list_t *list, size_t size);
 int atomic_list_prealloc(atomic_list_t *list, size_t size);
 
 char *atomic_list_to_string(atomic_list_t *list, char *(*item_to_string)(void *, int));
@@ -145,18 +153,31 @@ char *atomic_list_to_string_indent(atomic_list_t *list, int indentlevel, char *(
 void **atomic_list_checkout(atomic_list_t *list);
 void atomic_list_checkin(atomic_list_t *list, void **ary, size_t length);
 
+int nonatomic_list_set(atomic_list_t *list, off_t index, void *item);
 int atomic_list_set(atomic_list_t *list, off_t index, void *item);
+int nonatomic_list_push(atomic_list_t *list, void *item);
 int atomic_list_push(atomic_list_t *list, void *item);
+void *nonatomic_list_pop(atomic_list_t *list);
 void *atomic_list_pop(atomic_list_t *list);
+int nonatomic_list_unshift(atomic_list_t *list, void *item);
 int atomic_list_unshift(atomic_list_t *list, void *item);
+void *nonatomic_list_shift(atomic_list_t *list);
 void *atomic_list_shift(atomic_list_t *list);
+int nonatomic_list_insert(atomic_list_t *list, off_t index, void *item);
 int atomic_list_insert(atomic_list_t *list, off_t index, void *item);
+void *nonatomic_list_remove(atomic_list_t *list, off_t index);
 void *atomic_list_remove(atomic_list_t *list, off_t index);
+void nonatomic_list_remove_by_value(atomic_list_t *list, void *item);
 void atomic_list_remove_by_value(atomic_list_t *list, void *item);
+void nonatomic_list_reverse(atomic_list_t *list);
 void atomic_list_reverse(atomic_list_t *list);
+void nonatomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *));
 void atomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *));
+void nonatomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *));
 void atomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *));
+int nonatomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item);
 int atomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item);
+void nonatomic_list_clear(atomic_list_t *list);
 void atomic_list_clear(atomic_list_t *list);
 
 #endif /* #ifndef _ATOMICKIT_ATOMIC_LIST_H */

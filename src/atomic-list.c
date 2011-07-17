@@ -25,8 +25,6 @@
 #include "atomickit/spinlock.h"
 #include "atomickit/atomic-list.h"
 
-#define atomic_list_lock(list) spinlock_lock(&((list)->lock))
-#define atomic_list_unlock(list) atomic_list_readunlock(list)
 #define ALST_DEFAULT_CAPACITY 10
 
 static inline void invalidate_iterators(atomic_list_t *list) {
@@ -290,7 +288,7 @@ void atomic_list_destroy(atomic_list_t *list) {
     atomic_list_unlock(list);
 }
 
-static inline int atomic_list_compact_internal(atomic_list_t *list) {
+int nonatomic_list_compact(atomic_list_t *list) {
     if(list->length != list->capacity) {
 	void **new_list = realloc(list->list_ptr, sizeof(void *) * list->length);
 	if(new_list == NULL && list->length != 0) {
@@ -309,24 +307,29 @@ static inline int atomic_list_compact_internal(atomic_list_t *list) {
 int atomic_list_compact(atomic_list_t *list) {
     int r;
     atomic_list_lock(list);
-    r = atomic_list_compact_internal(list);
+    r = nonatomic_list_compact(list);
     atomic_list_unlock(list);
     return r;
 }
 
-int atomic_list_prealloc(atomic_list_t *list, size_t capacity) {
-    atomic_list_lock(list);
+int nonatomic_list_prealloc(atomic_list_t *list, size_t capacity) {
     if(list->capacity < capacity) {
 	void **new_list = realloc(list->list_ptr, sizeof(void *) * capacity);
 	if(new_list == NULL) {
-	    atomic_list_unlock(list);
 	    return -1;
 	}
 	list->list_ptr = new_list;
 	list->capacity = capacity;
     }
-    atomic_list_unlock(list);
     return 0;
+}
+
+int atomic_list_prealloc(atomic_list_t *list, size_t capacity) {
+    int r;
+    atomic_list_lock(list);
+    r = nonatomic_list_prealloc(list, capacity);
+    atomic_list_unlock(list);
+    return r;
 }
 
 /* Assume we're already locked */
@@ -350,7 +353,7 @@ static int ensure_capacity(atomic_list_t *list, size_t capacity) {
 
 void **atomic_list_checkout(atomic_list_t *list) {
     atomic_list_lock(list);
-    int r = atomic_list_compact_internal(list);
+    int r = atomic_list_compact(list);
     if(r != 0) {
 	atomic_list_unlock(list);
 	return NULL;
@@ -366,110 +369,141 @@ void atomic_list_checkin(atomic_list_t *list, void **ary, size_t length) {
     atomic_list_unlock(list);
 }
 
-int atomic_list_set(atomic_list_t *list, off_t index, void *item) {
-    atomic_list_lock(list);
+int nonatomic_list_set(atomic_list_t *list, off_t index, void *item) {
     if(ALST_OUT_OF_BOUNDS(list->length, index)) {
-	atomic_list_unlock(list);
 	errno = EFAULT;
 	return -1;
     }
     list->list_ptr[index] = item;
+    return 0;
+}
+
+int atomic_list_set(atomic_list_t *list, off_t index, void *item) {
+    int r;
+    atomic_list_lock(list);
+    r = nonatomic_list_set(list, index, item);
     atomic_list_unlock(list);
+    return r;
+}
+
+int nonatomic_list_push(atomic_list_t *list, void *item) {
+    int r;
+    r = ensure_capacity(list, list->length + 1);
+    if(r != 0) {
+	return r;
+    }
+    list->list_ptr[list->length++] = item;
     return 0;
 }
 
 int atomic_list_push(atomic_list_t *list, void *item) {
     int r;
     atomic_list_lock(list);
-    r = ensure_capacity(list, list->length + 1);
-    if(r != 0) {
-	atomic_list_unlock(list);
-	return r;
-    }
-    list->list_ptr[list->length++] = item;
+    r = nonatomic_list_push(list, item);
     atomic_list_unlock(list);
-    return 0;
+    return r;
+}
+
+void *nonatomic_list_pop(atomic_list_t *list) {
+    if(list->length == 0) {
+	return ALST_EMPTY;
+    }
+    return list->list_ptr[--list->length];
 }
 
 void *atomic_list_pop(atomic_list_t *list) {
     void *ret;
     atomic_list_lock(list);
-    if(list->length == 0) {
-	atomic_list_unlock(list);
-	return ALST_EMPTY;
-    }
-    ret = list->list_ptr[--list->length];
+    ret = nonatomic_list_pop(list);
     atomic_list_unlock(list);
     return ret;
 }
 
-int atomic_list_unshift(atomic_list_t *list, void *item) {
+int nonatomic_list_unshift(atomic_list_t *list, void *item) {
     int r;
-    atomic_list_lock(list);
     r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
-	atomic_list_unlock(list);
 	return r;
     }
     memmove(list->list_ptr + 1, list->list_ptr, list->length++ * sizeof(void *));
     increment_iterators(list, 0);
     list->list_ptr[0] = item;
-    atomic_list_unlock(list);
     return 0;
 }
 
-void *atomic_list_shift(atomic_list_t *list) {
-    void *ret;
+int atomic_list_unshift(atomic_list_t *list, void *item) {
+    int r;
     atomic_list_lock(list);
+    r = nonatomic_list_unshift(list, item);
+    atomic_list_unlock(list);
+    return r;
+}
+
+void *nonatomic_list_shift(atomic_list_t *list) {
+    void *ret;
     if(list->length == 0) {
-	atomic_list_unlock(list);
 	return ALST_EMPTY;
     }
     ret = list->list_ptr[0];
     memmove(list->list_ptr, list->list_ptr + 1, --list->length * sizeof(void *));
     decrement_iterators(list, 0);
+    return ret;
+}
+
+void *atomic_list_shift(atomic_list_t *list) {
+    void *ret;
+    atomic_list_lock(list);
+    ret = nonatomic_list_shift(list);
     atomic_list_unlock(list);
     return ret;
 }
 
-int atomic_list_insert(atomic_list_t *list, off_t index, void *item) {
+int nonatomic_list_insert(atomic_list_t *list, off_t index, void *item) {
     int r;
-    atomic_list_lock(list);
     if(ALST_OUT_OF_BOUNDS(list->length + 1, index)) {
-	atomic_list_unlock(list);
 	errno = EFAULT;
 	return -1;
     }
     r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
-	atomic_list_unlock(list);
 	return r;
     }
     memmove(list->list_ptr + index + 1, list->list_ptr + index, (list->length++ - index) * sizeof(void *));
     list->list_ptr[index] = item;
     increment_iterators(list, index);
-    atomic_list_unlock(list);
     return 0;
 }
 
-void *atomic_list_remove(atomic_list_t *list, off_t index) {
-    void *ret;
+int atomic_list_insert(atomic_list_t *list, off_t index, void *item) {
+    int r;
     atomic_list_lock(list);
+    r = nonatomic_list_insert(list, index, item);
+    atomic_list_unlock(list);
+    return r;
+}
+
+void *nonatomic_list_remove(atomic_list_t *list, off_t index) {
+    void *ret;
     if(ALST_OUT_OF_BOUNDS(list->length, index)) {
-	atomic_list_unlock(list);
 	errno = EFAULT;
 	return ALST_ERROR;
     }
     ret = list->list_ptr[index];
     memmove(list->list_ptr + index, list->list_ptr + index + 1, (--list->length - index) * sizeof(void *));
     decrement_iterators(list, index);
+    return ret;
+}
+
+void *atomic_list_remove(atomic_list_t *list, off_t index) {
+    void *ret;
+    atomic_list_lock(list);
+    ret = nonatomic_list_remove(list, index);
     atomic_list_unlock(list);
     return ret;
 }
 
-void atomic_list_remove_by_value(atomic_list_t *list, void *value) {
+void nonatomic_list_remove_by_value(atomic_list_t *list, void *value) {
     size_t i;
-    atomic_list_lock(list);
     for(i = 0; i < list->length;) {
 	if(list->list_ptr[i] == value) {
 	    memmove(list->list_ptr + i, list->list_ptr + i + 1, (--list->length - i) * sizeof(void *));
@@ -478,12 +512,16 @@ void atomic_list_remove_by_value(atomic_list_t *list, void *value) {
 	    i++;
 	}
     }
+}
+
+void atomic_list_remove_by_value(atomic_list_t *list, void *value) {
+    atomic_list_lock(list);
+    nonatomic_list_remove_by_value(list, value);
     atomic_list_unlock(list);
 }
 
-void atomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *)) {
+void nonatomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *)) {
     size_t i;
-    atomic_list_lock(list);
     i = 0;
     while(i < list->length) {
 	if(grep(list->list_ptr[i])) {
@@ -493,11 +531,15 @@ void atomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *)) {
 	    i++;
 	}
     }
+}
+
+void atomic_list_remove_by_exec(atomic_list_t *list, int(*grep)(void *)) {
+    atomic_list_lock(list);
+    nonatomic_list_remove_by_exec(list, grep);
     atomic_list_unlock(list);
 }
 
-void atomic_list_reverse(atomic_list_t *list) {
-    atomic_list_lock(list);
+void nonatomic_list_reverse(atomic_list_t *list) {
     size_t i;
     for(i = 0; i < (list->length >> 1); i++) {
 	register void *tmp;
@@ -506,6 +548,11 @@ void atomic_list_reverse(atomic_list_t *list) {
 	list->list_ptr[list->length - 1 - i] = tmp;
     }
     invalidate_iterators(list);
+}
+
+void atomic_list_reverse(atomic_list_t *list) {
+    atomic_list_lock(list);
+    nonatomic_list_reverse(list);
     atomic_list_unlock(list);
 }
 
@@ -516,19 +563,21 @@ static int compar_internal(const void *a, const void *b, void *arg) {
     return compar(_a, _b);
 }
 
-void atomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *)) {
-    atomic_list_lock(list);
+void nonatomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *)) {
     qsort_r(list->list_ptr, list->length, sizeof(void *), compar_internal, (void *) compar);
     invalidate_iterators(list);
+}
+
+void atomic_list_sort(atomic_list_t *list, int(*compar)(void *, void *)) {
+    atomic_list_lock(list);
+    nonatomic_list_sort(list, compar);
     atomic_list_unlock(list);
 }
 
-int atomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item) {
+int nonatomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item) {
     int r;
-    atomic_list_lock(list);
     r = ensure_capacity(list, list->length + 1);
     if(r != 0) {
-	atomic_list_unlock(list);
 	return r;
     }
     size_t max = list->length;
@@ -548,13 +597,24 @@ int atomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *),
     memmove(list->list_ptr + i + 1, list->list_ptr + i, (list->length++ - i) * sizeof(void *));
     list->list_ptr[i] = item;
     increment_iterators(list, i);
-    atomic_list_unlock(list);
     return 0;
+}
+
+int atomic_list_insert_sorted(atomic_list_t *list, int(*compar)(void *, void *), void *item) {
+    int r;
+    atomic_list_lock(list);
+    r = nonatomic_list_insert_sorted(list, compar, item);
+    atomic_list_unlock(list);
+    return r;
+}
+
+void nonatomic_list_clear(atomic_list_t *list) {
+    list->length = 0;
 }
 
 void atomic_list_clear(atomic_list_t *list) {
     atomic_list_lock(list);
-    list->length = 0;
+    nonatomic_list_clear(list);
     atomic_list_unlock(list);
 }
 

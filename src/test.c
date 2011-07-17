@@ -27,10 +27,10 @@ char *test_string1 = "Test String 1";
 char *test_string2 = "Test String 2";
 char *test_string3 = "Test String 3";
 
-char *sprintf_val = "Error at line 30000:";
+char sprintf_val[256];
 
 static char *my_sprintf(char *template, int line) {
-    sprintf(sprintf_val, template, line);
+    snprintf(sprintf_val, 256, template, line);
     return sprintf_val;
 }
 
