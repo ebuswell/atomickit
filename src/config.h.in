@@ -6,14 +6,14 @@
 /* Define if compiling for an x86_64/amd64 target. */
 #undef ARCH_X86_64
 
-/* Define to 1 if you have the <dlfcn.h> header file. */
-#undef HAVE_DLFCN_H
-
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the <stdatomic.h> header file. */
+#undef HAVE_STDATOMIC_H
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H
@@ -35,10 +35,6 @@
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
-
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
-#undef LT_OBJDIR
 
 /* Name of package */
 #undef PACKAGE

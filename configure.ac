@@ -20,28 +20,20 @@
 # along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
 
 # define version information
-m4_define(ATOMICKIT_VERSION, [0.1])
-
-m4_define(ATOMICKIT_INTERFACE_REVISION, 0)
-m4_define(ATOMICKIT_INTERFACE_BACK_COMPATABILITY, 0)
-m4_define(ATOMICKIT_SOURCE_REVISION, 0)
+m4_define(ATOMICKIT_VERSION, [0.2])
 
 AC_PREREQ([2.65])
 AC_INIT([atomickit], ATOMICKIT_VERSION, [ebuswell@gmail.com])
 AM_INIT_AUTOMAKE([-Wall foreign])
-AC_CONFIG_SRCDIR([src/atomic-list.c])
-AC_CONFIG_HEADERS([src/config.h include/atomickit/arch/arch.h])
+AC_CONFIG_SRCDIR([include/atomickit/atomic.h])
+AC_CONFIG_HEADERS([src/config.h])
 AC_CANONICAL_HOST
-
-VERSION_INFO=ATOMICKIT_INTERFACE_REVISION:ATOMICKIT_SOURCE_REVISION:ATOMICKIT_INTERFACE_BACK_COMPATABILITY
-AC_SUBST(VERSION_INFO)
 
 [ATOMICKIT_VERSION]=ATOMICKIT_VERSION
 AC_SUBST([ATOMICKIT_VERSION])
 
 # Checks for programs.
 AC_PROG_CC
-AC_PROG_LIBTOOL
 
 # Checks for libraries.
 
@@ -65,6 +57,8 @@ HOST_ARCH=$host_cpu-$host_os
 AC_SUBST(HOST_ARCH)
 
 # Checks for header files.
+AC_CHECK_HEADERS([stdatomic.h], [STDATOMIC_DEFINE="-DHAVE_STDATOMIC_H"], [STDATOMIC_DEFINE=""])
+AC_SUBST(STDATOMIC_DEFINE)
 
 # Checks for typedefs, structures, and compiler characteristics.
 

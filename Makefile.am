@@ -20,22 +20,16 @@ MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp inst
 EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign
 
-lib_LTLIBRARIES = libatomickit.la
-libatomickit_la_SOURCES = src/atomic-list.c
-libatomickit_la_LDFLAGS = $(LDFLAGS) -export-dynamic -version_info @VERSION_INFO@
-libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
-libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-long.h include/atomickit/atomic-ptr.h include/atomickit/atomic-types.h include/atomickit/atomic-list.h include/atomickit/spinlock.h
-libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/atomic.h include/@HOST_ARCH_SRC@/atomickit/arch/atomic-float.h include/@HOST_ARCH_SRC@/atomickit/arch/atomic-types.h
-nodist_libatomickitarchinclude_HEADERS = include/atomickit/arch/arch.h
+libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-txn.h
+libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = test
 test_SOURCES = src/test.c
-test_LDADD = -latomickit
 test_LDFLAGS = $(LD_FLAGS)
 test_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 TESTS = test
