@@ -30,7 +30,9 @@
 
 typedef atomic_uintptr_t atomic_ptr;
 
-#define ATOMIC_PTR_VAR_INIT(value) ATOMIC_VAR_INIT(value)
+#define ATOMIC_PTR_VAR_INIT(value) ATOMIC_VAR_INIT((uintptr_t) (value))
+
+#define atomic_ptr_is_lock_free(obj) atomic_is_lock_free(obj)
 
 static inline void atomic_ptr_init(volatile atomic_ptr *object, void *value) {
     atomic_init(object, (uintptr_t) value);
@@ -53,7 +55,7 @@ static inline void *atomic_ptr_load(volatile atomic_ptr *object) {
 }
 
 static inline void *atomic_ptr_exchange_explicit(volatile atomic_ptr *object, void *desired, memory_order order) {
-    return atomic_exchange_explicit(object, (uintptr_t) desired, order);
+    return (void *) atomic_exchange_explicit(object, (uintptr_t) desired, order);
 }
 
 static inline void *atomic_ptr_exchange(volatile atomic_ptr *object, void *desired) {

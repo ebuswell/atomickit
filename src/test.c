@@ -1,7 +1,7 @@
 /*
  * test.c
  * 
- * Copyright 2012 Evan Buswell
+ * Copyright 2013 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -18,25 +18,23 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "atomickit/atomic-list.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <alloca.h>
 
-char *test_string1 = "Test String 1";
-char *test_string2 = "Test String 2";
-char *test_string3 = "Test String 3";
+#include "atomickit/atomic.h"
+#include "atomickit/atomic-float.h"
+#include "atomickit/atomic-pointer.h"
+#include "atomickit/atomic-txn.h"
 
-char sprintf_val[256];
-
-static char *my_sprintf(char *template, int line) {
-    snprintf(sprintf_val, 256, template, line);
-    return sprintf_val;
-}
-
-static char *my_strdup(void * str, int dummy) {
-    return strdup((char *) str);
-}
+struct {
+    char __attribute__((aligned(8))) string1[14];
+    char __attribute__((aligned(8))) string2[14];
+    char __attribute__((aligned(8))) string3[14];
+} test = {"Test String 1", "Test String 2", "Test String 3"};
 
 #define CHECKING(function)			\
     printf("Checking " #function "...")		\
@@ -44,612 +42,727 @@ static char *my_strdup(void * str, int dummy) {
 #define OK()					\
     printf("OK\n")
 
+#define CONDFAIL(cond)					\
+    if(cond) {						\
+	printf("FAIL at %s:%d\n", __FILE__, __LINE__);	\
+	exit(1);					\
+    }
 
-#define CHECK_GET(function, expected)					\
-    do {								\
-	test_return = function(&list);					\
-	if(test_return == ALST_ERROR) {					\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return == ALST_EMPTY) {					\
-	    printf("Error at line %i: list claims to be empty\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return != expected) {					\
-	    printf("Error at line %i: received unexpected value \"%s\" (expected \"%s\")\n", __LINE__, (char *) test_return, (char *) expected); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
+volatile atomic_bool abool = ATOMIC_VAR_INIT(false);
+volatile atomic_char achar = ATOMIC_VAR_INIT('\0');
+volatile atomic_schar aschar = ATOMIC_VAR_INIT(0);
+volatile atomic_uchar auchar = ATOMIC_VAR_INIT(0);
+volatile atomic_short ashort = ATOMIC_VAR_INIT(0);
+volatile atomic_ushort aushort = ATOMIC_VAR_INIT(0);
+volatile atomic_int aint = ATOMIC_VAR_INIT(0);
+volatile atomic_uint auint = ATOMIC_VAR_INIT(0);
+volatile atomic_long along = ATOMIC_VAR_INIT(0);
+volatile atomic_ulong aulong = ATOMIC_VAR_INIT(0);
+volatile atomic_wchar_t awchar = ATOMIC_VAR_INIT('\0');
+volatile atomic_intptr_t aintptr = ATOMIC_VAR_INIT(0);
+volatile atomic_uintptr_t auintptr = ATOMIC_VAR_INIT(0);
+volatile atomic_size_t asize = ATOMIC_VAR_INIT(0);
+volatile atomic_ptrdiff_t aptrdiff = ATOMIC_VAR_INIT(0);
+volatile atomic_intmax_t aintmax = ATOMIC_VAR_INIT(0);
+volatile atomic_uintmax_t auintmax = ATOMIC_VAR_INIT(0);
+volatile atomic_flag aflag = ATOMIC_FLAG_INIT;
 
-#define CHECK_GET_EMPTY(function)					\
-    do {								\
-	test_return = function(&list);					\
-	if(test_return == ALST_ERROR) {					\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return != ALST_EMPTY) {					\
-	    printf("Error at line %i: list should be empty\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
+volatile atomic_float afloat;
+volatile atomic_double adouble;
+volatile atomic_ptr aptr = ATOMIC_PTR_VAR_INIT(NULL);
 
-#define CHECK_GET_ERROR(function)					\
-    do {								\
-	test_return = function(&list);					\
-	if(test_return != ALST_ERROR) {					\
-	    printf("Error at line %i: list should have given an error\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
+bool item1_destroyed = false;
+bool item2_destroyed = false;
 
-#define CHECK_GET2(function, index, expected)				\
-    do {								\
-	test_return = function(&list, index);				\
-	if(test_return == ALST_ERROR) {					\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return == ALST_EMPTY) {					\
-	    printf("Error at line %i: list claims to be empty\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return != expected) {					\
-	    printf("Error at line %i: received unexpected value \"%s\" (expected \"%s\")\n", __LINE__, (char *) test_return, (char *) expected); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-#define CHECK_GET2_EMPTY(function, index)				\
-    do {								\
-	test_return = function(&list, index);				\
-	if(test_return == ALST_ERROR) {					\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-	if(test_return != ALST_EMPTY) {					\
-	    printf("Error at line %i: list should be empty\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-#define CHECK_GET2_ERROR(function, index)				\
-    do {								\
-	test_return = function(&list, index);				\
-	if(test_return != ALST_ERROR) {					\
-	    printf("Error at line %i: list should have given an error\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-#define CHECK_PUT(function, value)					\
-    do {								\
-	r = function(&list, value);					\
-	if(r != 0) {							\
-	    perror(my_sprintf("Error at line %i", __LINE__));		\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-#define CHECK_PUT2(function, index, value)			\
-    do {							\
-	r = function(&list, index, value);			\
-	if(r != 0) {						\
-	    perror(my_sprintf("Error at line %i", __LINE__));	\
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));	\
-	    exit(1);						\
-	}							\
-    } while(0)
-
-#define CHECK_PUT2_ERROR(function, index, value)			\
-    do {								\
-	r = function(&list, index, value);				\
-	if(r == 0) {							\
-	    printf("Error at line %i: list should have given an error\n", __LINE__); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-#define CHECK_LENGTH(expected)						\
-    do {								\
-	length = atomic_list_length(&list);				\
-	if(length != expected) {					\
-	    printf("Error at line %i: expected length %zd, found length %zd\n", __LINE__, (size_t) expected, length); \
-	    printf("%s\n", atomic_list_to_string(&list, my_strdup));		\
-	    exit(1);							\
-	}								\
-    } while(0)
-
-
-int cmpstrings(void *str1, void *str2) {
-    return memcmp(str1, str2, 13);
+void destroy_item1(struct atxn_item *item __attribute__((unused))) {
+    item1_destroyed = true;
 }
 
-int main(int argc, char **argv) {
+void destroy_item2(struct atxn_item *item __attribute__((unused))) {
+    item2_destroyed = true;
+}
+
+atxn_t atxn;
+
+int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
     int r;
-    void *test_return;
-    size_t length;
+    float fr;
+    double dr;
+    void *pr;
 
-    atomic_list_t list;
-    setbuf(stdout, NULL);
-    CHECKING(atomic_list_init);
-    r = atomic_list_init(&list);
-    if(r != 0) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
+    printf("Testing single-threaded...\n");
+
+    CHECKING(atomic_init);
+    atomic_init(&aint, 21);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 21);
+    OK();
+
+    CHECKING(atomic_thread_fence);
+    atomic_thread_fence(memory_order_relaxed);
+    atomic_thread_fence(memory_order_consume);
+    atomic_thread_fence(memory_order_acquire);
+    atomic_thread_fence(memory_order_release);
+    atomic_thread_fence(memory_order_acq_rel);
+    atomic_thread_fence(memory_order_seq_cst);
+    OK();
+
+    CHECKING(atomic_signal_fence);
+    atomic_signal_fence(memory_order_relaxed);
+    atomic_signal_fence(memory_order_consume);
+    atomic_signal_fence(memory_order_acquire);
+    atomic_signal_fence(memory_order_release);
+    atomic_signal_fence(memory_order_acq_rel);
+    atomic_signal_fence(memory_order_seq_cst);
+    OK();
+
+    CHECKING(atomic_is_lock_free);
+    printf("\n");
+    printf("atomic_bool: ");
+    if(atomic_is_lock_free(&abool)) {
+	CONDFAIL(!ATOMIC_BOOL_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_BOOL_LOCK_FREE);
+	printf("false\n");
     }
-    OK();
-
-    CHECKING(atomic_list_init_with_capacity);
-    r = atomic_list_init_with_capacity(&list, 1);
-    if(r != 0) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
+    printf("atomic_char: ");
+    if(atomic_is_lock_free(&achar)) {
+	CONDFAIL(!ATOMIC_CHAR_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_CHAR_LOCK_FREE);
+	printf("false\n");
     }
-    OK();
-
-    CHECKING(atomic_list_length);
-    CHECK_LENGTH(0);
-    OK();
-
-    CHECKING(atomic_list_push);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_LENGTH(1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    CHECK_LENGTH(3);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    OK();
-
-    CHECKING(atomic_list_clear);
-    atomic_list_clear(&list);
-    CHECK_LENGTH(0);
-    OK();
-
-    CHECKING(atomic_list_unshift);
-    CHECK_PUT(atomic_list_unshift, test_string3);
-    CHECK_LENGTH(1);
-    CHECK_PUT(atomic_list_unshift, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_PUT(atomic_list_unshift, test_string1);
-    CHECK_LENGTH(3);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    OK();
-
-    CHECKING(atomic_list_get);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    CHECK_GET2_ERROR(atomic_list_get, 3);
-    CHECK_GET2_ERROR(atomic_list_get, -1);
-    CHECK_LENGTH(3);
-    OK();
-
-    CHECKING(atomic_list_compact);
-    r = atomic_list_compact(&list);
-    if(r != 0) {
-    	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-    	exit(1);
+    printf("atomic_schar: ");
+    printf(atomic_is_lock_free(&aschar) ? "true\n" : "false\n");
+    printf("atomic_uchar: ");
+    printf(atomic_is_lock_free(&auchar) ? "true\n" : "false\n");
+    printf("atomic_short: ");
+    if(atomic_is_lock_free(&ashort)) {
+	CONDFAIL(!ATOMIC_SHORT_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_SHORT_LOCK_FREE);
+	printf("false\n");
     }
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    CHECK_GET2_ERROR(atomic_list_get, 3);
-    CHECK_GET2_ERROR(atomic_list_get, -1);
-    OK();
-
-    CHECKING(atomic_list_prealloc);
-    r = atomic_list_prealloc(&list, 200);
-    if(r != 0) {
-    	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-    	exit(1);
+    printf("atomic_ushort: ");
+    printf(atomic_is_lock_free(&aushort) ? "true\n" : "false\n");
+    printf("atomic_int: ");
+    if(atomic_is_lock_free(&aint)) {
+	CONDFAIL(!ATOMIC_INT_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_INT_LOCK_FREE);
+	printf("false\n");
     }
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    CHECK_GET2_ERROR(atomic_list_get, 3);
-    CHECK_GET2_ERROR(atomic_list_get, -1);
-    OK();
-
-
-    CHECKING(atomic_list_pop);
-    CHECK_GET(atomic_list_pop, test_string3);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET(atomic_list_pop, test_string2);
-    CHECK_LENGTH(1);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET(atomic_list_pop, test_string1);
-    CHECK_LENGTH(0);
-    CHECK_GET_EMPTY(atomic_list_pop);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    CHECK_LENGTH(3);
-    OK();
-
-    CHECKING(atomic_list_shift);
-    CHECK_GET(atomic_list_shift, test_string1);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string2);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_GET(atomic_list_shift, test_string2);
-    CHECK_LENGTH(1);
-    CHECK_GET2(atomic_list_get, 0, test_string3);
-    CHECK_GET(atomic_list_shift, test_string3);
-    CHECK_LENGTH(0);
-    CHECK_GET_EMPTY(atomic_list_shift);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(atomic_list_first);
-    CHECK_GET(atomic_list_first, test_string1);
-    CHECK_LENGTH(3);
-    CHECK_GET(atomic_list_shift, test_string1);
-    CHECK_GET(atomic_list_first, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_GET(atomic_list_shift, test_string2);
-    CHECK_GET(atomic_list_first, test_string3);
-    CHECK_LENGTH(1);
-    CHECK_GET(atomic_list_shift, test_string3);
-    CHECK_GET_EMPTY(atomic_list_first);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(atomic_list_last);
-    CHECK_GET(atomic_list_last, test_string3);
-    CHECK_LENGTH(3);
-    CHECK_GET(atomic_list_pop, test_string3);
-    CHECK_GET(atomic_list_last, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_GET(atomic_list_pop, test_string2);
-    CHECK_GET(atomic_list_last, test_string1);
-    CHECK_LENGTH(1);
-    CHECK_GET(atomic_list_pop, test_string1);
-    CHECK_GET_EMPTY(atomic_list_last);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(atomic_list_set);
-    CHECK_PUT2(atomic_list_set, 0, test_string3);
-    CHECK_PUT2(atomic_list_set, 1, test_string1);
-    CHECK_PUT2(atomic_list_set, 2, test_string2);
-    CHECK_LENGTH(3);
-    CHECK_GET2(atomic_list_get, 0, test_string3);
-    CHECK_GET2(atomic_list_get, 1, test_string1);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_PUT2_ERROR(atomic_list_set, -1, test_string1);
-    CHECK_PUT2_ERROR(atomic_list_set, 3, test_string1);
-    atomic_list_clear(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(atomic_list_insert);
-    CHECK_PUT2(atomic_list_insert, 1, test_string3);
-    CHECK_LENGTH(4);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_GET2(atomic_list_get, 3, test_string3);
-    CHECK_PUT2(atomic_list_insert, 4, test_string1);
-    CHECK_LENGTH(5);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_GET2(atomic_list_get, 3, test_string3);
-    CHECK_GET2(atomic_list_get, 4, test_string1);
-    atomic_list_clear(&list);
-    CHECK_PUT2(atomic_list_insert, 0, test_string3);
-    CHECK_PUT2(atomic_list_insert, 0, test_string2);
-    CHECK_PUT2(atomic_list_insert, 0, test_string1);
-    CHECK_LENGTH(3);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string3);
-    OK();
-
-    CHECKING(atomic_list_remove);
-    CHECK_GET2(atomic_list_remove, 1, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-
-    CHECK_GET2(atomic_list_remove, 1, test_string3);
-    CHECK_LENGTH(1);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-
-    CHECK_GET2(atomic_list_remove, 0, test_string1);
-    CHECK_LENGTH(0);
-    CHECK_GET2_ERROR(atomic_list_remove, 0);
-    CHECK_GET2_ERROR(atomic_list_remove, 1);
-    CHECK_GET2_ERROR(atomic_list_remove, -1);
-    CHECK_LENGTH(0);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    CHECK_GET2_ERROR(atomic_list_remove, 3);
-    CHECK_GET2_ERROR(atomic_list_remove, -1);
-    OK();
-
-    CHECKING(atomic_list_remove_by_value);
-    atomic_list_remove_by_value(&list, test_string2);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_PUT2(atomic_list_insert, 1, test_string2);
-
-    atomic_list_remove_by_value(&list, test_string3);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-
-    atomic_list_remove_by_value(&list, test_string1);
-    CHECK_LENGTH(2);
-    CHECK_GET2(atomic_list_get, 0, test_string2);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_PUT(atomic_list_unshift, test_string1);
-
-    atomic_list_remove_by_value(&list, test_string1);
-    atomic_list_remove_by_value(&list, test_string2);
-    atomic_list_remove_by_value(&list, test_string3);
-    CHECK_LENGTH(0);
-    atomic_list_remove_by_value(&list, test_string1);
-    atomic_list_remove_by_value(&list, test_string2);
-    atomic_list_remove_by_value(&list, test_string3);
-    CHECK_LENGTH(0);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(atomic_list_readlock);
-    atomic_list_readlock(&list);
-    OK();
-
-    CHECKING(atomic_list_readunlock);
-    atomic_list_readunlock(&list);
-    OK();
-
-    CHECKING(nonatomic_list_length);
-    atomic_list_readlock(&list);
-    length = nonatomic_list_length(&list);
-    if(length != 3) {
-	printf("Error at line %i: expected length %zd, found length %zd\n", __LINE__, (size_t) 3, length);
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
+    printf("atomic_uint: ");
+    printf(atomic_is_lock_free(&auint) ? "true\n" : "false\n");
+    printf("atomic_long: ");
+    if(atomic_is_lock_free(&along)) {
+	CONDFAIL(!ATOMIC_LONG_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_LONG_LOCK_FREE);
+	printf("false\n");
     }
-    atomic_list_readunlock(&list);
-    CHECK_GET(atomic_list_shift, test_string1);
-    CHECK_GET(atomic_list_shift, test_string2);
-    CHECK_GET(atomic_list_shift, test_string3);
-    atomic_list_readlock(&list);
-    length = nonatomic_list_length(&list);
-    if(length != 0) {
-	printf("Error at line %i: expected length %zd, found length %zd\n", __LINE__, (size_t) 3, length);
-	exit(1);
+    printf("atomic_ulong: ");
+    printf(atomic_is_lock_free(&aulong) ? "true\n" : "false\n");
+    printf("atomic_wchar_t: ");
+    if(atomic_is_lock_free(&awchar)) {
+	CONDFAIL(!ATOMIC_WCHAR_T_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_WCHAR_T_LOCK_FREE);
+	printf("false\n");
     }
-    atomic_list_readunlock(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(nonatomic_list_first);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_first, test_string1);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(3);
-    CHECK_GET(atomic_list_shift, test_string1);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_first, test_string2);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(2);
-    CHECK_GET(atomic_list_shift, test_string2);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_first, test_string3);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(1);
-    CHECK_GET(atomic_list_shift, test_string3);
-    atomic_list_readlock(&list);
-    CHECK_GET_EMPTY(nonatomic_list_first);
-    atomic_list_readunlock(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(nonatomic_list_last);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_last, test_string3);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(3);
-    CHECK_GET(atomic_list_pop, test_string3);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_last, test_string2);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(2);
-    CHECK_GET(atomic_list_pop, test_string2);
-    atomic_list_readlock(&list);
-    CHECK_GET(nonatomic_list_last, test_string1);
-    atomic_list_readunlock(&list);
-    CHECK_LENGTH(1);
-    CHECK_GET(atomic_list_pop, test_string1);
-    atomic_list_readlock(&list);
-    CHECK_GET_EMPTY(nonatomic_list_last);
-    atomic_list_readunlock(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    OK();
-
-    CHECKING(nonatomic_list_get);
-    atomic_list_readlock(&list);
-    CHECK_GET2(nonatomic_list_get, 0, test_string1);
-    CHECK_GET2(nonatomic_list_get, 1, test_string2);
-    CHECK_GET2(nonatomic_list_get, 2, test_string3);
-    CHECK_GET2_ERROR(nonatomic_list_get, 3);
-    CHECK_GET2_ERROR(nonatomic_list_get, -1);
-    atomic_list_readunlock(&list);
-    CHECK_GET(atomic_list_shift, test_string1);
-    CHECK_GET(atomic_list_shift, test_string2);
-    CHECK_GET(atomic_list_shift, test_string3);
-    atomic_list_readlock(&list);
-    CHECK_GET2_ERROR(nonatomic_list_get, 0);
-    CHECK_GET2_ERROR(nonatomic_list_get, 1);
-    CHECK_GET2_ERROR(nonatomic_list_get, -1);
-    atomic_list_readunlock(&list);
-    OK();
-
-    CHECKING(atomic_iterator_init);
-    atomic_iterator_t i;
-    r = atomic_iterator_init(&list, &i);
-    if(r != 0) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
+    printf("atomic_intptr_t: ");
+    if(atomic_is_lock_free(&aintptr)) {
+	CONDFAIL(!ATOMIC_POINTER_LOCK_FREE);
+	printf("true\n");
+    } else {
+	CONDFAIL(ATOMIC_POINTER_LOCK_FREE);
+	printf("false\n");
     }
+    printf("atomic_uintptr_t: ");
+    printf(atomic_is_lock_free(&auintptr) ? "true\n" : "false\n");
+    printf("atomic_size_t: ");
+    printf(atomic_is_lock_free(&asize) ? "true\n" : "false\n");
+    printf("atomic_ptrdiff_t: ");
+    printf(atomic_is_lock_free(&aptrdiff) ? "true\n" : "false\n");
+    printf("atomic_intmax_t: ");
+    printf(atomic_is_lock_free(&aintmax) ? "true\n" : "false\n");
+    printf("atomic_uintmax_t: ");
+    printf(atomic_is_lock_free(&auintmax) ? "true\n" : "false\n");
+    printf("atomic_flag: ");
+    printf(atomic_is_lock_free(&aflag) ? "true\n" : "false\n");
     OK();
 
-    CHECKING(atomic_iterator_destroy);
-    atomic_iterator_destroy(&list, &i);
+    CHECKING(atomic_store_explicit);
+    atomic_store_explicit(&aint, 31, memory_order_relaxed);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 31);
     OK();
 
-    CHECKING(atomic_iterator_next);
-    r = atomic_iterator_init(&list, &i);
-    if(r != 0) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
-    }
-    CHECK_GET2_EMPTY(atomic_iterator_next, &i);
-    atomic_iterator_destroy(&list, &i);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    r = atomic_iterator_init(&list, &i);
-    if(r != 0) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	printf("%s\n", atomic_list_to_string(&list, my_strdup));
-	exit(1);
-    }
-    CHECK_GET2(atomic_iterator_next, &i, test_string1);
-    CHECK_GET2(atomic_iterator_next, &i, test_string2);
-    CHECK_PUT(atomic_list_unshift, test_string1);
-    CHECK_PUT(atomic_list_unshift, test_string1);
-    CHECK_PUT(atomic_list_unshift, test_string1);
-    CHECK_GET2(atomic_iterator_next, &i, test_string3);
-    CHECK_GET2_EMPTY(atomic_iterator_next, &i);
-    atomic_iterator_destroy(&list, &i);
-    atomic_list_clear(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
+    CHECKING(atomic_store);
+    atomic_store(&aint, 41);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 41);
     OK();
 
-    CHECKING(atomic_list_reverse);
-    atomic_list_reverse(&list);
-    CHECK_LENGTH(3);
-    CHECK_GET2(atomic_list_get, 0, test_string3);
-    CHECK_GET2(atomic_list_get, 1, test_string2);
-    CHECK_GET2(atomic_list_get, 2, test_string1);
-    atomic_list_clear(&list);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    CHECK_PUT(atomic_list_push, test_string1);
-    atomic_list_reverse(&list);
-    CHECK_LENGTH(4);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string3);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_GET2(atomic_list_get, 3, test_string1);
-    atomic_list_clear(&list);
-    atomic_list_reverse(&list);
-    CHECK_LENGTH(0);
+    CHECKING(atomic_load_explicit);
+    atomic_store(&aint, 51);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 51);
     OK();
 
-    CHECKING(atomic_list_sort);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string2);
-    CHECK_PUT(atomic_list_push, test_string3);
-    CHECK_PUT(atomic_list_push, test_string1);
-    CHECK_PUT(atomic_list_push, test_string3);
-    atomic_list_sort(&list, cmpstrings);
-    CHECK_LENGTH(5);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string1);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_GET2(atomic_list_get, 3, test_string3);
-    CHECK_GET2(atomic_list_get, 4, test_string3);
-    atomic_list_clear(&list);
-    atomic_list_sort(&list, cmpstrings);    
-    CHECK_PUT(atomic_list_push, test_string1);
-    atomic_list_sort(&list, cmpstrings);    
-    CHECK_LENGTH(1);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    atomic_list_clear(&list);
+    CHECKING(atomic_load);
+    atomic_store(&aint, 61);
+    CONDFAIL(atomic_load(&aint) != 61);
     OK();
 
-    CHECKING(atomic_list_insert_sorted);
-    CHECK_PUT2(atomic_list_insert_sorted, cmpstrings, test_string1);
-    CHECK_PUT2(atomic_list_insert_sorted, cmpstrings, test_string3);
-    CHECK_PUT2(atomic_list_insert_sorted, cmpstrings, test_string2);
-    CHECK_PUT2(atomic_list_insert_sorted, cmpstrings, test_string1);
-    CHECK_PUT2(atomic_list_insert_sorted, cmpstrings, test_string2);
-    CHECK_LENGTH(5);
-    CHECK_GET2(atomic_list_get, 0, test_string1);
-    CHECK_GET2(atomic_list_get, 1, test_string1);
-    CHECK_GET2(atomic_list_get, 2, test_string2);
-    CHECK_GET2(atomic_list_get, 3, test_string2);
-    CHECK_GET2(atomic_list_get, 4, test_string3);
+    CHECKING(atomic_exchange_explicit);
+    r = atomic_exchange_explicit(&aint, 71, memory_order_relaxed);
+    CONDFAIL(r != 61);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 71);
     OK();
 
-    CHECKING(atomic_list_to_string);
-    char *str = atomic_list_to_string(&list, my_strdup);
-    if(str == NULL) {
-	perror(my_sprintf("Error at line %i", __LINE__));
-	exit(1);
-    }
-    printf("\n%s\n", str);
-    free(str);
+    CHECKING(atomic_exchange);
+    r = atomic_exchange(&aint, 81);
+    CONDFAIL(r != 71);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 81);
     OK();
 
-    CHECKING(atomic_list_destroy);
-    atomic_list_destroy(&list);
+    CHECKING(atomic_compare_exchange_strong_explicit);
+    CONDFAIL(atomic_compare_exchange_strong_explicit(&aint, &r, 91, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(r != 81);
+    CONDFAIL(!atomic_compare_exchange_strong_explicit(&aint, &r, 91, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(r != 81);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 91);
+    OK();
+
+    CHECKING(atomic_compare_exchange_strong);
+    CONDFAIL(atomic_compare_exchange_strong(&aint, &r, 101));
+    CONDFAIL(r != 91);
+    CONDFAIL(!atomic_compare_exchange_strong(&aint, &r, 101));
+    CONDFAIL(r != 91);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 101);
+    OK();
+
+    CHECKING(atomic_compare_exchange_weak_explicit);
+    CONDFAIL(atomic_compare_exchange_weak_explicit(&aint, &r, 111, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(r != 101);
+    CONDFAIL(!atomic_compare_exchange_weak_explicit(&aint, &r, 111, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(r != 101);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 111);
+    OK();
+
+    CHECKING(atomic_compare_exchange_weak);
+    CONDFAIL(atomic_compare_exchange_weak(&aint, &r, 121));
+    CONDFAIL(r != 111);
+    CONDFAIL(!atomic_compare_exchange_weak(&aint, &r, 121));
+    CONDFAIL(r != 111);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 121);
+    OK();
+
+    CHECKING(atomic_fetch_add_explicit);
+    CONDFAIL(atomic_fetch_add_explicit(&aint, 10, memory_order_relaxed) != 121);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 131);
+    OK();
+
+    CHECKING(atomic_fetch_add);
+    CONDFAIL(atomic_fetch_add(&aint, 10) != 131);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 141);
+    OK();
+
+    CHECKING(atomic_fetch_sub_explicit);
+    CONDFAIL(atomic_fetch_sub_explicit(&aint, 10, memory_order_relaxed) != 141);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 131);
+    OK();
+
+    CHECKING(atomic_fetch_sub);
+    CONDFAIL(atomic_fetch_sub(&aint, 10) != 131);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 121);
+    OK();
+
+    CHECKING(atomic_fetch_or_explicit);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_or_explicit(&aint, 0x1, memory_order_relaxed) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x3);
+    OK();
+
+    CHECKING(atomic_fetch_or);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_or(&aint, 0x1) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x3);
+    OK();
+
+    CHECKING(atomic_fetch_xor_explicit);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_xor_explicit(&aint, 0x3, memory_order_relaxed) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x1);
+    OK();
+
+    CHECKING(atomic_fetch_xor);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_xor(&aint, 0x3) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x1);
+    OK();
+
+    CHECKING(atomic_fetch_and_explicit);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_and_explicit(&aint, 0x3, memory_order_relaxed) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x2);
+    OK();
+
+    CHECKING(atomic_fetch_and);
+    atomic_store_explicit(&aint, 0x2, memory_order_relaxed);
+    CONDFAIL(atomic_fetch_and(&aint, 0x3) != 0x2);
+    CONDFAIL(atomic_load_explicit(&aint, memory_order_relaxed) != 0x2);
+    OK();
+
+    CHECKING(atomic_flag_test_and_set_explicit);
+    CONDFAIL(atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));
+    CONDFAIL(!atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));
+    OK();
+
+    CHECKING(atomic_flag_clear_explicit);
+    atomic_flag_clear_explicit(&aflag, memory_order_relaxed);
+    CONDFAIL(atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));
+    atomic_flag_clear_explicit(&aflag, memory_order_relaxed);
+    OK();
+
+    CHECKING(atomic_flag_test_and_set);
+    CONDFAIL(atomic_flag_test_and_set(&aflag));
+    CONDFAIL(!atomic_flag_test_and_set(&aflag));
+    OK();
+
+    CHECKING(atomic_flag_clear);
+    atomic_flag_clear(&aflag);
+    CONDFAIL(atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));
+    OK();
+
+
+    CHECKING(atomic_float_init);
+    atomic_float_init(&afloat, 2.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 2.1f);
+    OK();
+
+    CHECKING(atomic_float_is_lock_free);
+    printf("\n");
+    printf("atomic_float: ");
+    printf(atomic_float_is_lock_free(&afloat) ? "true\n" : "false\n");
+    OK();
+
+    CHECKING(atomic_float_store_explicit);
+    atomic_float_store_explicit(&afloat, 3.1f, memory_order_relaxed);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 3.1f);
+    OK();
+
+    CHECKING(atomic_float_store);
+    atomic_float_store(&afloat, 4.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 4.1f);
+    OK();
+
+    CHECKING(atomic_float_load_explicit);
+    atomic_float_store(&afloat, 5.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 5.1f);
+    OK();
+
+    CHECKING(atomic_float_load);
+    atomic_float_store(&afloat, 6.1f);
+    CONDFAIL(atomic_float_load(&afloat) != 6.1f);
+    OK();
+
+    CHECKING(atomic_float_exchange_explicit);
+    fr = atomic_float_exchange_explicit(&afloat, 7.1f, memory_order_relaxed);
+    CONDFAIL(fr != 6.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 7.1f);
+    OK();
+
+    CHECKING(atomic_float_exchange);
+    fr = atomic_float_exchange(&afloat, 8.1f);
+    CONDFAIL(fr != 7.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 8.1f);
+    OK();
+
+    CHECKING(atomic_float_compare_exchange_strong_explicit);
+    CONDFAIL(atomic_float_compare_exchange_strong_explicit(&afloat, &fr, 9.1f, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(fr != 8.1f);
+    CONDFAIL(!atomic_float_compare_exchange_strong_explicit(&afloat, &fr, 9.1f, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(fr != 8.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 9.1f);
+    OK();
+
+    CHECKING(atomic_float_compare_exchange_strong);
+    CONDFAIL(atomic_float_compare_exchange_strong(&afloat, &fr, 10.1f));
+    CONDFAIL(fr != 9.1f);
+    CONDFAIL(!atomic_float_compare_exchange_strong(&afloat, &fr, 10.1f));
+    CONDFAIL(fr != 9.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 10.1f);
+    OK();
+
+    CHECKING(atomic_float_compare_exchange_weak_explicit);
+    CONDFAIL(atomic_float_compare_exchange_weak_explicit(&afloat, &fr, 11.1f, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(fr != 10.1f);
+    CONDFAIL(!atomic_float_compare_exchange_weak_explicit(&afloat, &fr, 11.1f, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(fr != 10.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 11.1f);
+    OK();
+
+    CHECKING(atomic_float_compare_exchange_weak);
+    CONDFAIL(atomic_float_compare_exchange_weak(&afloat, &fr, 12.1f));
+    CONDFAIL(fr != 11.1f);
+    CONDFAIL(!atomic_float_compare_exchange_weak(&afloat, &fr, 12.1f));
+    CONDFAIL(fr != 11.1f);
+    CONDFAIL(atomic_float_load_explicit(&afloat, memory_order_relaxed) != 12.1f);
+    OK();
+
+    /* CHECKING(atomic_double_init); */
+    /* atomic_double_init(&adouble, 2.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 2.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_is_lock_free); */
+    /* printf("\n"); */
+    /* printf("atomic_double: "); */
+    /* printf(atomic_double_is_lock_free(&adouble) ? "true\n" : "false\n"); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_store_explicit); */
+    /* atomic_double_store_explicit(&adouble, 3.1f, memory_order_relaxed); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 3.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_store); */
+    /* atomic_double_store(&adouble, 4.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 4.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_load_explicit); */
+    /* atomic_double_store(&adouble, 5.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 5.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_load); */
+    /* atomic_double_store(&adouble, 6.1f); */
+    /* CONDFAIL(atomic_double_load(&adouble) != 6.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_exchange_explicit); */
+    /* dr = atomic_double_exchange_explicit(&adouble, 7.1f, memory_order_relaxed); */
+    /* CONDFAIL(dr != 6.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 7.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_exchange); */
+    /* dr = atomic_double_exchange(&adouble, 8.1f); */
+    /* CONDFAIL(dr != 7.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 8.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_compare_exchange_strong_explicit); */
+    /* CONDFAIL(atomic_double_compare_exchange_strong_explicit(&adouble, &dr, 9.1f, memory_order_relaxed, memory_order_relaxed)); */
+    /* CONDFAIL(dr != 8.1f); */
+    /* CONDFAIL(!atomic_double_compare_exchange_strong_explicit(&adouble, &dr, 9.1f, memory_order_relaxed, memory_order_relaxed)); */
+    /* CONDFAIL(dr != 8.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 9.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_compare_exchange_strong); */
+    /* CONDFAIL(atomic_double_compare_exchange_strong(&adouble, &dr, 10.1f)); */
+    /* CONDFAIL(dr != 9.1f); */
+    /* CONDFAIL(!atomic_double_compare_exchange_strong(&adouble, &dr, 10.1f)); */
+    /* CONDFAIL(dr != 9.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 10.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_compare_exchange_weak_explicit); */
+    /* CONDFAIL(atomic_double_compare_exchange_weak_explicit(&adouble, &dr, 11.1f, memory_order_relaxed, memory_order_relaxed)); */
+    /* CONDFAIL(dr != 10.1f); */
+    /* CONDFAIL(!atomic_double_compare_exchange_weak_explicit(&adouble, &dr, 11.1f, memory_order_relaxed, memory_order_relaxed)); */
+    /* CONDFAIL(dr != 10.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 11.1f); */
+    /* OK(); */
+
+    /* CHECKING(atomic_double_compare_exchange_weak); */
+    /* CONDFAIL(atomic_double_compare_exchange_weak(&adouble, &dr, 12.1f)); */
+    /* CONDFAIL(dr != 11.1f); */
+    /* CONDFAIL(!atomic_double_compare_exchange_weak(&adouble, &dr, 12.1f)); */
+    /* CONDFAIL(dr != 11.1f); */
+    /* CONDFAIL(atomic_double_load_explicit(&adouble, memory_order_relaxed) != 12.1f); */
+    /* OK(); */
+
+    CHECKING(atomic_ptr_init);
+    atomic_ptr_init(&aptr, test.string1);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string1);
+    OK();
+
+    CHECKING(atomic_ptr_is_lock_free);
+    printf("\n");
+    printf("atomic_ptr: ");
+    printf(atomic_ptr_is_lock_free(&aptr) ? "true\n" : "false\n");
+    OK();
+
+    CHECKING(atomic_ptr_store_explicit);
+    atomic_ptr_store_explicit(&aptr, test.string2, memory_order_relaxed);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_store);
+    atomic_ptr_store(&aptr, test.string3);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string3);
+    OK();
+
+    CHECKING(atomic_ptr_load_explicit);
+    atomic_ptr_store(&aptr, test.string1);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string1);
+    OK();
+
+    CHECKING(atomic_ptr_load);
+    atomic_ptr_store(&aptr, test.string2);
+    CONDFAIL(atomic_ptr_load(&aptr) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_exchange_explicit);
+    pr = atomic_ptr_exchange_explicit(&aptr, test.string3, memory_order_relaxed);
+    CONDFAIL(pr != test.string2);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string3);
+    OK();
+
+    CHECKING(atomic_ptr_exchange);
+    pr = atomic_ptr_exchange(&aptr, test.string1);
+    CONDFAIL(pr != test.string3);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string1);
+    OK();
+
+    CHECKING(atomic_ptr_compare_exchange_strong_explicit);
+    CONDFAIL(atomic_ptr_compare_exchange_strong_explicit(&aptr, &pr, test.string2, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(pr != test.string1);
+    CONDFAIL(!atomic_ptr_compare_exchange_strong_explicit(&aptr, &pr, test.string2, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(pr != test.string1);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_compare_exchange_strong);
+    CONDFAIL(atomic_ptr_compare_exchange_strong(&aptr, &pr, test.string3));
+    CONDFAIL(pr != test.string2);
+    CONDFAIL(!atomic_ptr_compare_exchange_strong(&aptr, &pr, test.string3));
+    CONDFAIL(pr != test.string2);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string3);
+    OK();
+
+    CHECKING(atomic_ptr_compare_exchange_weak_explicit);
+    CONDFAIL(atomic_ptr_compare_exchange_weak_explicit(&aptr, &pr, test.string1, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(pr != test.string3);
+    CONDFAIL(!atomic_ptr_compare_exchange_weak_explicit(&aptr, &pr, test.string1, memory_order_relaxed, memory_order_relaxed));
+    CONDFAIL(pr != test.string3);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string1);
+    OK();
+
+    CHECKING(atomic_ptr_compare_exchange_weak);
+    CONDFAIL(atomic_ptr_compare_exchange_weak(&aptr, &pr, test.string2));
+    CONDFAIL(pr != test.string1);
+    CONDFAIL(!atomic_ptr_compare_exchange_weak(&aptr, &pr, test.string2));
+    CONDFAIL(pr != test.string1);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_add_explicit);
+    CONDFAIL(atomic_ptr_fetch_add_explicit(&aptr, 4, memory_order_relaxed) != test.string2);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[4]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_add);
+    CONDFAIL(atomic_ptr_fetch_add(&aptr, 4) != &test.string2[4]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[8]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_sub_explicit);
+    CONDFAIL(atomic_ptr_fetch_sub_explicit(&aptr, 4, memory_order_relaxed) != &test.string2[8]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[4]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_sub);
+    CONDFAIL(atomic_ptr_fetch_sub(&aptr, 4) != &test.string2[4]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_or_explicit);
+    CONDFAIL(atomic_ptr_fetch_or_explicit(&aptr, 0x1, memory_order_relaxed) != test.string2);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[1]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_or);
+    atomic_ptr_store_explicit(&aptr, test.string2, memory_order_relaxed);
+    CONDFAIL(atomic_ptr_fetch_or(&aptr, 0x1) != test.string2);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[1]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_xor_explicit);
+    atomic_ptr_store_explicit(&aptr, &test.string2[2], memory_order_relaxed);
+    CONDFAIL(atomic_ptr_fetch_xor_explicit(&aptr, 0x3, memory_order_relaxed) != &test.string2[2]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[1]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_xor);
+    atomic_ptr_store_explicit(&aptr, &test.string2[2], memory_order_relaxed);
+    CONDFAIL(atomic_ptr_fetch_xor(&aptr, 0x3) != &test.string2[2]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != &test.string2[1]);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_and_explicit);
+    atomic_ptr_store_explicit(&aptr, &test.string2[2], memory_order_relaxed);
+    CONDFAIL(atomic_ptr_fetch_and_explicit(&aptr, ~((uintptr_t) 7), memory_order_relaxed) != &test.string2[2]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    CHECKING(atomic_ptr_fetch_and);
+    atomic_ptr_store_explicit(&aptr, &test.string2[2], memory_order_relaxed);
+    CONDFAIL(atomic_ptr_fetch_and(&aptr, ~((uintptr_t) 7)) != &test.string2[2]);
+    CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
+    OK();
+
+    struct atxn_item *item1 = alloca(sizeof(struct atxn_item) + 14 - 1);
+    item1->destroy = destroy_item1;
+    strcpy((char *) item1->data, test.string1);
+    struct atxn_item *item2 = alloca(sizeof(struct atxn_item) + 14 - 1);
+    item2->destroy = destroy_item2;
+    strcpy((char *) item2->data, test.string2);
+
+    void *ptr1;
+    void *ptr2;
+    void *ptr3;
+
+    CHECKING(atxn_init);
+    atxn_init(&atxn, item1);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(ptr1 != &item1->data);
+    CONDFAIL(strcmp(ptr1, test.string1) != 0);
+    atxn_release(&atxn, ptr1);
+    OK();
+
+    CHECKING(atxn_count);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(atxn_count(&atxn) != 1);
+    ptr2 = atxn_acquire(&atxn);
+    CONDFAIL(atxn_count(&atxn) != 2);
+    atxn_release(&atxn, ptr1);
+    CONDFAIL(atxn_count(&atxn) != 1);
+    atxn_release(&atxn, ptr2);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    OK();
+
+    CHECKING(atxn_acquire);
+    ptr1 = atxn_acquire(&atxn);
+    ptr2 = atxn_acquire(&atxn);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(ptr1 != &item1->data);
+    CONDFAIL(ptr2 != &item1->data);
+    CONDFAIL(strcmp(ptr1, ptr2) != 0);
+
+    CONDFAIL(strcmp(ptr1, test.string1) != 0);
+    CONDFAIL(atxn_count(&atxn) != 2);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    atxn_release(&atxn, ptr1);
+    atxn_release(&atxn, ptr2);
+    OK();
+
+    CHECKING(atxn_commit);
+    /* succeed and destroy */
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(!atxn_commit(&atxn, ptr1, item2));
+    CONDFAIL(!item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(atomic_load(&item2->refcount) != 0);
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(ptr1 != &item2->data);
+    CONDFAIL(strcmp(ptr1, test.string2) != 0);
+    atxn_release(&atxn, ptr1);
+    item1_destroyed = false;
+    /* succeed and don't destroy */
+    ptr1 = atxn_acquire(&atxn);
+    ptr2 = atxn_acquire(&atxn);
+    CONDFAIL(!atxn_commit(&atxn, ptr1, item1));
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    CONDFAIL(atomic_load(&item2->refcount) != 1);
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(ptr1 != &item1->data);
+    CONDFAIL(strcmp(ptr1, test.string1) != 0);
+    atxn_release(&atxn, ptr1);
+    /* fail */
+    CONDFAIL(atxn_commit(&atxn, ptr2, item1));
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    CONDFAIL(atomic_load(&item2->refcount) != 1);
+    ptr1 = atxn_acquire(&atxn);
+    CONDFAIL(ptr1 != &item1->data);
+    CONDFAIL(strcmp(ptr1, test.string1) != 0);
+    atxn_release(&atxn, ptr1);
+    /* cleanup */
+    atxn_release(&atxn, ptr2);
+    item2_destroyed = false;
+    OK();
+
+    CHECKING(atxn_release);
+    /* current */
+    ptr1 = atxn_acquire(&atxn);
+    ptr2 = atxn_acquire(&atxn);
+    atxn_release(&atxn, ptr1);
+    CONDFAIL(atxn_count(&atxn) != 1);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    atxn_release(&atxn, ptr1);
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    /* not current */
+    ptr1 = atxn_acquire(&atxn);
+    ptr2 = atxn_acquire(&atxn);
+    ptr3 = atxn_acquire(&atxn);
+    atxn_commit(&atxn, ptr1, item2);
+    atxn_release(&atxn, ptr2); /* don't destroy */
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atomic_load(&item1->refcount) != 1);
+    atxn_release(&atxn, ptr3); /* destroy */
+    CONDFAIL(atxn_count(&atxn) != 0);
+    CONDFAIL(!item1_destroyed);
+    CONDFAIL(item2_destroyed);
+    CONDFAIL(atomic_load(&item2->refcount) != 0);
+    item1_destroyed = false;
+    /* cleanup */
+    ptr1 = atxn_acquire(&atxn);
+    atxn_commit(&atxn, ptr1, item1);
+    item2_destroyed = false;
+    OK();
+
+    CHECKING(atxn_destroy);
+    /* destroy item, too */
+    atxn_destroy(&atxn);
+    CONDFAIL(!item1_destroyed);
+    item1_destroyed = false;
+    /* don't destroy item */
+    atxn_init(&atxn, item1);
+    ptr1 = atxn_acquire(&atxn);
+    atxn_destroy(&atxn);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(atomic_load(&item1->refcount) != 1);
+    atxn_release(&atxn, ptr1);
+    CONDFAIL(!item1_destroyed);
+    item1_destroyed = false;
+    /* no cleanup; leave destroyed */
     OK();
 
     exit(0);

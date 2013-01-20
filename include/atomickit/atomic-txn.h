@@ -23,9 +23,10 @@
 #include <atomickit/atomic-pointer.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 typedef struct {
-    atomic_ptr/*<struct atxn_item>*/ ptr;
+    volatile atomic_ptr/*<struct atxn_item>*/ ptr;
 } atxn_t;
 
 #ifdef __LP64__
@@ -36,43 +37,50 @@ typedef struct {
 
 struct atxn_item {
     void (*destroy)(struct atxn_item *);
-    atomic_int_fast8_t refcount;
+    volatile atomic_int_fast8_t refcount;
     uint8_t data[1] __attribute__((aligned(ATXN_ALIGN)));
 };
 
 #define ATXN_COUNTMASK ((intptr_t) (ATXN_ALIGN - 1))
 
-#define ATXN_PTR2ITEM(ptr) ((struct atxn_item *) ((ptr) - (sizeof(struct atxn_item) - 1)))
+#define ATXN_PTRDECOUNT(ptr) ((void *) (((intptr_t) (ptr)) & ~ATXN_COUNTMASK))
+#define ATXN_PTR2ITEM(ptr) ((struct atxn_item *) (((intptr_t) (ptr)) - offsetof(struct atxn_item, data)))
+#define ATXN_PTR2COUNT(ptr) ((intptr_t) (ptr) & ATXN_COUNTMASK)
 #define ATXN_ITEM2PTR(item) ((void *) &item->data)
 
-#define ATXN_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) }
+/* #define ATXN_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) } */
 
 /* Not atomic */
 static inline void atxn_init(atxn_t *txn, struct atxn_item *item) {
+    atomic_store(&item->refcount, 0);
     atomic_ptr_init(&txn->ptr, ATXN_ITEM2PTR(item));
 }
 
-/* Not atomic */
 static inline void atxn_destroy(atxn_t *txn) {
     void *ptr;
-    if((ptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed)) != NULL) {
-	struct atxn_item *item = ATXN_ITEM(ptr & ~ATXN_COUNTMASK);
-	item->destroy(item);
-	atomic_ptr_store_explicit(&txn->ptr, NULL, memory_order_relaxed);
+    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange(&txn->ptr, NULL)) != NULL) {
+	int_fast8_t count = ATXN_PTR2COUNT(ptr);
+	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
+	if(atomic_fetch_add(&item->refcount, count) + count == 0) {
+	    item->destroy(item);
+	}
     }
 }
 
+static inline int_fast8_t atxn_count(atxn_t *txn) {
+    return ATXN_PTR2COUNT(atomic_ptr_load(&txn->ptr));
+}
+
 static inline void *atxn_acquire(volatile atxn_t *txn) {
-    void *ptr = atomic_ptr_fetch_add(&txn->ptr, 1);
-    return ptr & ~ATXN_COUNTMASK;
+    return ATXN_PTRDECOUNT(atomic_ptr_fetch_add(&txn->ptr, 1));
 }
 
 static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
     /* Is the ptr still valid? then just decrement it. */
     void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
-    while((localptr & ~ATXN_COUNTMASK) == ptr) {
-	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1),
-		  memory_order_seq_cst, memory_order_relaxed)) {
+    while(ATXN_PTRDECOUNT(localptr) == ptr) {
+	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1,
+							    memory_order_seq_cst, memory_order_relaxed))) {
 	    /* Success! */
 	    return;
 	}
@@ -94,21 +102,20 @@ static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
 static inline bool atxn_commit(volatile atxn_t *txn, void *oldptr, struct atxn_item *newitem) {
     void *newptr = ATXN_ITEM2PTR(newitem);
     void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
+    atomic_store(&newitem->refcount, 0);
     do {
-	if((localptr & ~ATXN_COUNTMASK) != oldptr) {
+	if(ATXN_PTRDECOUNT(localptr) != oldptr) {
 	    /* fail */
 	    return false;
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, newptr,
 								memory_order_seq_cst, memory_order_relaxed)));
     /* success! */
-    if((localptr & ~ATXN_COUNTMASK) != NULL) {
+    if(ATXN_PTRDECOUNT(localptr) != NULL) {
 	/* Transfer count, minus the implicitly present reference to oldptr. */
-	int_fast8_t count = (localptr & ATXN_COUNTMASK) - 1;
-	struct atxn_item *item = ATXN_PTR2ITEM(localptr & ~ATXN_COUNTMASK);
-	if(count == 0) {
-	    item->destroy(item);
-	} else if(atomic_fetch_add(&item->refcount, count) + count == 0) {
+	int_fast8_t count = ATXN_PTR2COUNT(localptr);
+	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(localptr));
+	if(atomic_fetch_add(&item->refcount, count - 1) + count - 1 == 0) {
 	    item->destroy(item);
 	}
     }
