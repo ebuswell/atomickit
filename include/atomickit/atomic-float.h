@@ -35,7 +35,7 @@ typedef atomic_uint_least64_t atomic_double;
 #define atomic_double_is_lock_free(obj) atomic_is_lock_free(obj)
 
 #define __AK_canonical_float(f)					\
-    (unlikely(isnanf(f)) ? NAN : ((f) == 0.0f ? 0.0f : (f)))
+    (unlikely(isnan(f)) ? NAN : ((f) == 0.0f ? 0.0f : (f)))
 
 #define __AK_canonical_double(d)				\
     (unlikely(isnan(d)) ? NAN : ((d) == 0.0 ? 0.0 : (d)))

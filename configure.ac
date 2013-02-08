@@ -60,6 +60,8 @@ AC_SUBST(HOST_ARCH)
 AC_CHECK_HEADERS([stdatomic.h], [STDATOMIC_DEFINE="-DHAVE_STDATOMIC_H"], [STDATOMIC_DEFINE=""])
 AC_SUBST(STDATOMIC_DEFINE)
 
+AC_FUNC_ALLOCA
+
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
