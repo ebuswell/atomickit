@@ -254,7 +254,7 @@ typedef struct {
     case __X86_CASE_B:							\
     {									\
 	volatile uint8_t *__ptr = (volatile uint8_t *)&(object)->counter; \
-	volatile register uint8_t dummy = desired;						\
+	register volatile uint8_t dummy = desired;						\
 	__asm__ __volatile__(movk "b %b1,%0"				\
 			     : "=m" (*__ptr), "=q" (dummy)		\
 			     : "1" (dummy)				\
@@ -264,7 +264,7 @@ typedef struct {
     case __X86_CASE_W:							\
     {									\
 	volatile uint16_t *__ptr = (volatile uint16_t *)&(object)->counter; \
-	volatile register uint16_t dummy = desired;						\
+	register volatile uint16_t dummy = desired;						\
 	__asm__ __volatile__(movk "w %w1,%0"				\
 			     : "=m" (*__ptr), "=r" (dummy)	\
 			     : "1" (dummy)				\
@@ -274,7 +274,7 @@ typedef struct {
     case __X86_CASE_L:							\
     {									\
 	volatile uint32_t *__ptr = (volatile uint32_t *)&(object)->counter; \
-	volatile register uint32_t dummy = desired;						\
+	register volatile uint32_t dummy = desired;						\
 	__asm__ __volatile__(movk "l %1,%0"				\
 			     : "=m" (*__ptr), "=r" (dummy)	\
 			     : "1" (dummy)				\
@@ -284,7 +284,7 @@ typedef struct {
     case __X86_CASE_Q:							\
     {									\
 	volatile uint64_t *__ptr = (volatile uint64_t *)&(object)->counter; \
-	volatile register uint64_t dummy = desired;						\
+	register volatile uint64_t dummy = desired;						\
 	__asm__ __volatile__(movk "q %q1,%0"				\
 			     : "=m" (*__ptr), "=r" (dummy)	\
 			     : "1" (dummy)				\
