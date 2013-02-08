@@ -248,46 +248,93 @@ typedef struct {
 # define __X86_CASE_Q_EMU 8
 #endif
 
-#define __atomic_store(object, desired, movk)				\
+#define __atomic_store_lock(object, desired)				\
 ({									\
     switch(sizeof((object)->counter)) {					\
     case __X86_CASE_B:							\
     {									\
 	volatile uint8_t *__ptr = (volatile uint8_t *)&(object)->counter; \
-	register volatile uint8_t dummy = desired;						\
-	__asm__ __volatile__(movk "b %b1,%0"				\
+	register volatile uint8_t dummy;				\
+	__asm__ __volatile__("xchgb %b1,%0"				\
 			     : "=m" (*__ptr), "=q" (dummy)		\
-			     : "1" (dummy)				\
+			     : "1" (desired)				\
 			     : "memory");				\
 	break;								\
     }									\
     case __X86_CASE_W:							\
     {									\
 	volatile uint16_t *__ptr = (volatile uint16_t *)&(object)->counter; \
-	register volatile uint16_t dummy = desired;						\
-	__asm__ __volatile__(movk "w %w1,%0"				\
-			     : "=m" (*__ptr), "=r" (dummy)	\
-			     : "1" (dummy)				\
+	register volatile uint16_t dummy;				\
+	__asm__ __volatile__("xchgw %w1,%0"				\
+			     : "=m" (*__ptr), "=r" (dummy)		\
+			     : "1" (desired)				\
 			     : "memory");				\
 	break;								\
     }									\
     case __X86_CASE_L:							\
     {									\
 	volatile uint32_t *__ptr = (volatile uint32_t *)&(object)->counter; \
-	register volatile uint32_t dummy = desired;						\
-	__asm__ __volatile__(movk "l %1,%0"				\
-			     : "=m" (*__ptr), "=r" (dummy)	\
-			     : "1" (dummy)				\
+	register volatile uint32_t dummy;				\
+	__asm__ __volatile__("xchgl %1,%0"				\
+			     : "=m" (*__ptr), "=r" (dummy)		\
+			     : "1" (desired)				\
 			     : "memory");				\
 	break;								\
     }									\
     case __X86_CASE_Q:							\
     {									\
 	volatile uint64_t *__ptr = (volatile uint64_t *)&(object)->counter; \
-	register volatile uint64_t dummy = desired;						\
-	__asm__ __volatile__(movk "q %q1,%0"				\
-			     : "=m" (*__ptr), "=r" (dummy)	\
-			     : "1" (dummy)				\
+	register volatile uint64_t dummy;				\
+	__asm__ __volatile__("xchgq %q1,%0"				\
+			     : "=m" (*__ptr), "=r" (dummy)		\
+			     : "1" (desired)				\
+			     : "memory");				\
+	break;								\
+    }									\
+    case __X86_CASE_Q_EMU:						\
+	__AK_64not_implemented();					\
+	break;								\
+    default:								\
+	__AK_wrong_size();						\
+    }									\
+})
+
+#define __atomic_store(object, desired)					\
+({									\
+    switch(sizeof((object)->counter)) {					\
+    case __X86_CASE_B:							\
+    {									\
+	volatile uint8_t *__ptr = (volatile uint8_t *)&(object)->counter; \
+	__asm__ __volatile__("movb %b1,%0"				\
+			     : "=m" (*__ptr)				\
+			     : "q" (desired)				\
+			     : "memory");				\
+	break;								\
+    }									\
+    case __X86_CASE_W:							\
+    {									\
+	volatile uint16_t *__ptr = (volatile uint16_t *)&(object)->counter; \
+	__asm__ __volatile__("movw %w1,%0"				\
+			     : "=m" (*__ptr)				\
+			     : "r" (desired)				\
+			     : "memory");				\
+	break;								\
+    }									\
+    case __X86_CASE_L:							\
+    {									\
+	volatile uint32_t *__ptr = (volatile uint32_t *)&(object)->counter; \
+	__asm__ __volatile__("movl %1,%0"				\
+			     : "=m" (*__ptr)				\
+			     : "r" (desired)				\
+			     : "memory");				\
+	break;								\
+    }									\
+    case __X86_CASE_Q:							\
+    {									\
+	volatile uint64_t *__ptr = (volatile uint64_t *)&(object)->counter; \
+	__asm__ __volatile__("movq %q1,%0"				\
+			     : "=m" (*__ptr)				\
+			     : "r" (desired)				\
 			     : "memory");				\
 	break;								\
     }									\
@@ -317,11 +364,11 @@ typedef struct {
     case memory_order_acquire:						\
     case memory_order_release:						\
     case memory_order_acq_rel:						\
-	__atomic_store((object), (desired), "mov");			\
+        __atomic_store((object), (desired));				\
 	break;								\
     case memory_order_seq_cst:						\
     default:								\
-	__atomic_store((object), (desired), "xchg");			\
+        __atomic_store_lock((object), (desired));			\
     }									\
 })
 
