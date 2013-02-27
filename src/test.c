@@ -43,6 +43,7 @@ void *alloca (size_t);
 #include "atomickit/atomic-float.h"
 #include "atomickit/atomic-pointer.h"
 #include "atomickit/atomic-txn.h"
+#include "atomickit/atomic-queue.h"
 
 struct {
     char __attribute__((aligned(8))) string1[14];
@@ -98,10 +99,28 @@ void destroy_item2(struct atxn_item *item __attribute__((unused))) {
 
 atxn_t atxn;
 
+bool node1_destroyed = false;
+bool node2_destroyed = false;
+bool dummy_destroyed = false;
+
+void destroy_node1(struct aqueue_node *node __attribute__((unused))) {
+    node1_destroyed = true;
+}
+
+void destroy_node2(struct aqueue_node *node __attribute__((unused))) {
+    node2_destroyed = true;
+}
+
+void destroy_dummy(struct aqueue_node *node __attribute__((unused))) {
+    dummy_destroyed = true;
+}
+
+aqueue_t aqueue;
+
 int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
     int r;
     float fr;
-    double dr;
+    /* double dr; */
     void *pr;
 
     printf("Testing single-threaded...\n");
@@ -633,150 +652,147 @@ int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) 
     CONDFAIL(atomic_ptr_load_explicit(&aptr, memory_order_relaxed) != test.string2);
     OK();
 
+    printf("Preparing atxn tests...");
     struct atxn_item *item1 = alloca(sizeof(struct atxn_item) + 14 - 1);
-    item1->destroy = destroy_item1;
     strcpy((char *) item1->data, test.string1);
     struct atxn_item *item2 = alloca(sizeof(struct atxn_item) + 14 - 1);
-    item2->destroy = destroy_item2;
     strcpy((char *) item2->data, test.string2);
-
+    void *item1_ptr;
+    void *item2_ptr;
     void *ptr1;
     void *ptr2;
-    void *ptr3;
+    OK();
 
-    CHECKING(atxn_init);
-    atxn_init(&atxn, item1);
+    CHECKING(atxn_item_init);
+    item1_ptr = atxn_item_init(item1, destroy_item1);
+    CONDFAIL(item1->destroy != destroy_item1);
+    CONDFAIL(&item1->data != item1_ptr);
+    item2_ptr = atxn_item_init(item2, destroy_item2);
+    CONDFAIL(item2->destroy != destroy_item2);
+    CONDFAIL(&item2->data != item2_ptr);
     CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atxn_count(&atxn) != 0);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
+    OK();
+
+    CHECKING(atxn_init);
+    atxn_init(&atxn, item1_ptr);
+    CONDFAIL(item1_destroyed);
+    CONDFAIL(item2_destroyed);
     ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(ptr1 != &item1->data);
+    CONDFAIL(ptr1 != item1_ptr);
     CONDFAIL(strcmp(ptr1, test.string1) != 0);
     atxn_release(&atxn, ptr1);
     OK();
 
-    CHECKING(atxn_count);
-    CONDFAIL(atxn_count(&atxn) != 0);
-    ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(atxn_count(&atxn) != 1);
-    ptr2 = atxn_acquire(&atxn);
-    CONDFAIL(atxn_count(&atxn) != 2);
-    atxn_release(&atxn, ptr1);
-    CONDFAIL(atxn_count(&atxn) != 1);
-    atxn_release(&atxn, ptr2);
-    CONDFAIL(atxn_count(&atxn) != 0);
+    CHECKING(atxn_destroy);
+    atxn_destroy(&atxn);
+    CONDFAIL(item1_destroyed);
+    atxn_init(&atxn, item1_ptr);
+    atxn_item_release(item1_ptr);
+    atxn_destroy(&atxn);
+    CONDFAIL(!item1_destroyed);
+    item1_destroyed = false;
+    item1_ptr = atxn_item_init(item1, destroy_item1);
+    atxn_init(&atxn, item1_ptr);
     OK();
 
     CHECKING(atxn_acquire);
     ptr1 = atxn_acquire(&atxn);
     ptr2 = atxn_acquire(&atxn);
     CONDFAIL(item1_destroyed);
-    CONDFAIL(item2_destroyed);
-    CONDFAIL(ptr1 != &item1->data);
-    CONDFAIL(ptr2 != &item1->data);
+    CONDFAIL(ptr1 != item1_ptr);
+    CONDFAIL(ptr2 != item1_ptr);
     CONDFAIL(strcmp(ptr1, ptr2) != 0);
-
     CONDFAIL(strcmp(ptr1, test.string1) != 0);
-    CONDFAIL(atxn_count(&atxn) != 2);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
     atxn_release(&atxn, ptr1);
     atxn_release(&atxn, ptr2);
+    CONDFAIL(item1_destroyed);
+    OK();
+
+    CHECKING(atxn_item_release);
+    atxn_item_release(item1_ptr);
+    CONDFAIL(item1_destroyed);
+    item1_ptr = atxn_acquire(&atxn);
+    atxn_destroy(&atxn);
+    atxn_item_release(item1_ptr);
+    CONDFAIL(!item1_destroyed);
+    item1_destroyed = false;
+    item1_ptr = atxn_item_init(item1, destroy_item1);
+    atxn_init(&atxn, item1_ptr);
     OK();
 
     CHECKING(atxn_commit);
-    /* succeed and destroy */
-    ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(!atxn_commit(&atxn, ptr1, item2));
-    CONDFAIL(!item1_destroyed);
+    /* succeed */
+    CONDFAIL(!atxn_commit(&atxn, item1_ptr, item2_ptr));
+    CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atxn_count(&atxn) != 0);
-    CONDFAIL(atomic_load(&item2->refcount) != 0);
     ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(ptr1 != &item2->data);
+    CONDFAIL(ptr1 != item2_ptr);
     CONDFAIL(strcmp(ptr1, test.string2) != 0);
     atxn_release(&atxn, ptr1);
-    item1_destroyed = false;
-    /* succeed and don't destroy */
-    ptr1 = atxn_acquire(&atxn);
-    ptr2 = atxn_acquire(&atxn);
-    CONDFAIL(!atxn_commit(&atxn, ptr1, item1));
-    CONDFAIL(item1_destroyed);
-    CONDFAIL(item2_destroyed);
-    CONDFAIL(atxn_count(&atxn) != 0);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
-    CONDFAIL(atomic_load(&item2->refcount) != 1);
-    ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(ptr1 != &item1->data);
-    CONDFAIL(strcmp(ptr1, test.string1) != 0);
-    atxn_release(&atxn, ptr1);
     /* fail */
-    CONDFAIL(atxn_commit(&atxn, ptr2, item1));
+    CONDFAIL(atxn_commit(&atxn, item1_ptr, item1_ptr));
     CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atxn_count(&atxn) != 0);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
-    CONDFAIL(atomic_load(&item2->refcount) != 1);
     ptr1 = atxn_acquire(&atxn);
-    CONDFAIL(ptr1 != &item1->data);
-    CONDFAIL(strcmp(ptr1, test.string1) != 0);
+    CONDFAIL(ptr1 != item2_ptr);
+    CONDFAIL(strcmp(ptr1, test.string2) != 0);
     atxn_release(&atxn, ptr1);
-    /* cleanup */
-    atxn_release(&atxn, ptr2);
-    item2_destroyed = false;
+    atxn_commit(&atxn, item2_ptr, item1_ptr);
+    OK();
+
+    CHECKING(atxn_check);
+    CONDFAIL(!atxn_check(&atxn, item1_ptr));
+    atxn_commit(&atxn, item1_ptr, item2_ptr);
+    CONDFAIL(atxn_check(&atxn, item1_ptr));
+    atxn_commit(&atxn, item2_ptr, item1_ptr);
     OK();
 
     CHECKING(atxn_release);
+    atxn_item_release(item1_ptr);
     /* current */
     ptr1 = atxn_acquire(&atxn);
     ptr2 = atxn_acquire(&atxn);
     atxn_release(&atxn, ptr1);
-    CONDFAIL(atxn_count(&atxn) != 1);
     CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
-    atxn_release(&atxn, ptr1);
-    CONDFAIL(atxn_count(&atxn) != 0);
+    atxn_release(&atxn, ptr2);
     CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atomic_load(&item1->refcount) != 0);
     /* not current */
     ptr1 = atxn_acquire(&atxn);
     ptr2 = atxn_acquire(&atxn);
-    ptr3 = atxn_acquire(&atxn);
-    atxn_commit(&atxn, ptr1, item2);
-    atxn_release(&atxn, ptr2); /* don't destroy */
-    CONDFAIL(atxn_count(&atxn) != 0);
+    atxn_commit(&atxn, item1_ptr, item2_ptr);
+    atxn_release(&atxn, ptr1);
     CONDFAIL(item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atomic_load(&item1->refcount) != 1);
-    atxn_release(&atxn, ptr3); /* destroy */
-    CONDFAIL(atxn_count(&atxn) != 0);
+    atxn_release(&atxn, ptr2);
     CONDFAIL(!item1_destroyed);
     CONDFAIL(item2_destroyed);
-    CONDFAIL(atomic_load(&item2->refcount) != 0);
     item1_destroyed = false;
-    /* cleanup */
-    ptr1 = atxn_acquire(&atxn);
-    atxn_commit(&atxn, ptr1, item1);
-    item2_destroyed = false;
+    item1_ptr = atxn_item_init(item1, destroy_item1);
+    atxn_commit(&atxn, item2_ptr, item1_ptr);
     OK();
 
-    CHECKING(atxn_destroy);
-    /* destroy item, too */
+    printf("Cleaning up atxn tests...");
+    atxn_item_release(item1_ptr);
+    atxn_item_release(item2_ptr);
     atxn_destroy(&atxn);
-    CONDFAIL(!item1_destroyed);
-    item1_destroyed = false;
-    /* don't destroy item */
-    atxn_init(&atxn, item1);
-    ptr1 = atxn_acquire(&atxn);
-    atxn_destroy(&atxn);
-    CONDFAIL(item1_destroyed);
-    CONDFAIL(atomic_load(&item1->refcount) != 1);
-    atxn_release(&atxn, ptr1);
-    CONDFAIL(!item1_destroyed);
-    item1_destroyed = false;
-    /* no cleanup; leave destroyed */
+    OK();
+
+    printf("Preparing aqueue tests...");
+    struct aqueue_node *node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
+    strcpy((char *) node1->nodeptr.data, test.string1);
+    struct aqueue_node *node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
+    strcpy((char *) node2->nodeptr.data, test.string2);
+    struct aqueue_node *dummy = alloca(sizeof(struct aqueue_node) - 1);
+    void *node1_ptr;
+    void *node2_ptr;
+    void *dummy_ptr;
+    OK();
+
+    CHECKING(aqueue_node_init);
+    dummy_ptr = 
     OK();
 
     exit(0);

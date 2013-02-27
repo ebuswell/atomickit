@@ -1,0 +1,400 @@
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+#include <stdlib.h>
+
+#include "test.h"
+
+struct test_result_list *test_results = NULL;
+
+#define TEST_RESULT_LIST_INITIAL_SIZE 8;
+
+int test_results_push(struct test_result *result) {
+    if(test_results == NULL) {
+	test_results = malloc(sizeof(struct test_result_list) + (TEST_RESULT_INITIAL_SIZE - 1) * sizeof(struct test_result *));
+	if(test_results == NULL) {
+	    return -1;
+	}
+	test_results->nrusults = 0;
+	test_results->results_capacity = TEST_RESULT_INITIAL_SIZE;
+    } else if(test_results->nresults == test_results->results_capacity) {
+	test_results->results_capacity *= 2;
+	struct test_result_list *new_test_results = realloc(sizeof(struct test_result_list) + (test_results->results_capacity - 1) * sizeof(struct test_result *));
+	if(new_test_results == NULL) {
+	    test_results->results_capacity /= 2;
+	    return -1;
+	}
+	test_results = new_test_results;
+    }
+    test_results->results[test_results->nresolts++] = result;
+    return 0;
+}
+
+struct test_result *test_result_create(char *test_name, enum test_result result, char *explanation, char *file, char *line) {
+    struct test_result *result = malloc(sizeof(struct test_result));
+    if(result == NULL) {
+	return NULL;
+    }
+    result->test_name == NULL;
+    result->result = result;
+    result->explanation = NULL;
+    result->file = NULL;
+    result->line = NULL;
+    if(test_name != NULL) {
+	result->test_name = strdup(test_name);
+	if(result->test_name == NULL) {
+	    test_result_free(result);
+	    return NULL;
+	}
+    }
+    if(explanation != NULL) {
+	result->explanation = strdup(explanation);
+	if(result->explanation == NULL) {
+	    test_result_free(result);
+	    return NULL;
+	}
+    }
+    if(file != NULL) {
+	result->file = strdup(file);
+	if(result->file == NULL) {
+	    test_result_free(result);
+	    return NULL;
+	}
+    }
+    if(line != NULL) {
+	result->line = strdup(line);
+	if(result->line == NULL) {
+	    test_result_free(result);
+	    return NULL;
+	}
+    }
+}
+
+void test_result_free(struct test_result *result) {
+    if(result->test_name != NULL) {
+	free(result->test_name);
+    }
+    if(result->explanation != NULL) {
+	free(result->explanation);
+    }
+    if(result->file != NULL) {
+	free(result->file);
+    }
+    if(result->line != NULL) {
+	free(result->line);
+    }
+    free(result);
+}
+
+int no_test(char *test_name, enum test_result result, char *explanation) {
+    int r;
+    struct test_result *myresult = test_result_create(test_name, result, explanation, NULL, NULL);
+    if(myresult == NULL) {
+	return -1;
+    }
+    r = test_results_push(myresult);
+    if(r != 0) {
+	test_result_free(myresult);
+	return r;
+    }
+    return 0;
+}
+
+FILE *test_writer;
+
+int run_test(void (*fixture)(void (*)()), const char *test_name, void (*test)()) {
+    pid_t pid = 0;
+    int pipefd[2];
+    int r;
+    char *uerror;
+    int myerrno = 0;
+    struct test_result *result = test_result_create(test_name, UNRESOLVED, NULL, NULL, NULL);
+    if(result == NULL) {
+	return -1;
+    }
+
+    r = pipe(pipefd);
+    if(r != 0) {
+	myerrno = errno;
+	uerror = "Could not create pipe";
+	goto error;
+    }
+
+    if((pid = fork()) == 0) {
+	/* child */
+	r = close(pipefd[0]); /* close read */
+	if(r != 0) {
+	    exit(EXIT_FAILURE);
+	}
+	test_writer = fdopen(pipefd[1]);
+	if(test_writer == NULL) {
+	    exit(EXIT_FAILURE);
+	}
+	fixture(test);
+	fprintf(test_writer, "PASS:");
+	fclose(test_writer); /* ignore errors */
+	exit(EXIT_SUCCESS);
+    } else if(pid == -1) {
+	myerrno = errno;
+	uerror = "Could not fork";
+	goto error;
+    }
+
+    /* parent */
+    char line[256];
+    FILE *reader;
+
+    r = close(pipefd[1]); /* close write */
+    if(r != 0) {
+	myerrno = errno;
+	uerror = "Could not close pipefd[1]";
+	goto error;
+    }
+
+    reader = fdopen(pipefd[0]);
+    if(reader == NULL) {
+	myerrno = errno;
+	uerror = "Could not fdopen reader";
+	goto error;
+    }
+
+    while(fgets(line, 256, reader) != NULL) {
+	if((strlen(line) < 1)
+	   || (strcmp(line, "\n") == 0)) {
+	    /* blank line */
+	    continue;
+	}
+	if(result->explanation != NULL) {
+	    /* We already did this... */
+	    uerror = "Received double result from child process";
+	    goto error;
+	}
+	if(strncmp(line, "CHECKPOINT:", strlen("CHECKPOINT:")) == 0) {
+	    char *file = line + strlen("CHECKPOINT:");
+	    char *lineno = strchr(file, ':');
+	    if(lineno == NULL) {
+		uerror = "Failure to parse child message";
+		goto error;
+	    }
+	    *lineno++ = '\0';
+	    char *maybenl = strchr(lineno, '\n');
+	    if(maybenl != NULL) {
+		*maybenl = '\0';
+	    }
+	    file = strdup(file);
+	    if(file == NULL) {
+		myerrno = errno;
+		uerror = "Could not strdup file";
+		goto error;
+	    }
+	    lineno = strdup(lineno);
+	    if(lineno == NULL) {
+		myerrno = errno;
+		free(file);
+		uerror = "Could not strdup line";
+		goto error;
+	    }
+	    if(result->file != NULL) {
+		free(result->file);
+	    }
+	    if(result->line != NULL) {
+		free(result->line);
+	    }
+	    result->file = file;
+	    result->line = lineno;
+	} else {
+	    char *message = line;
+	    if(strncmp(message, "PASS:", strlen("PASS:"))) {
+		result->result = PASS;
+		message += strlen("PASS:");
+	    } else if(strncmp(message, "FAIL:", strlen("FAIL:"))) {
+		result->result = FAIL;
+		message += strlen("FAIL:");
+	    } else if(strncmp(message, "UNRESOLVED:", strlen("UNRESOLVED:"))) {
+		result->result = UNRESOLVED;
+		message += strlen("UNRESOLVED:");
+	    } else if(strncmp(message, "UNTESTED:", strlen("UNTESTED:"))) {
+		result->result = UNTESTED;
+		message += strlen("UNTESTED:");
+	    } else if(strncmp(message, "UNSUPPORTED:", strlen("UNSUPPORTED:"))) {
+		result->result = UNSUPPORTED;
+		message += strlen("UNSUPPORTED:");
+	    } else {
+		uerror = "Failure to parse child message";
+		goto error;
+	    }
+	    char *maybenl = strchr(message, '\n');
+	    if(maybenl != NULL) {
+		maybenl = '\0';
+	    }
+	    result->explanation = strdup(message);
+	    if(result->explanation == NULL) {
+		uerror = "Could not strdup message";
+		goto error;
+	    }
+	}
+    }
+    if(ferror(reader)) {
+	/* uhhh... */
+	myerrno = errno;
+	uerror = "Error when reading";
+	goto error;
+    }
+    r = fclose(reader);
+    if(r != 0) {
+	myerrno = errno;
+	uerror = "Could not close reader";
+	goto error;
+    }
+    pid = waitpid(pid, &status, 0);
+    if(pid == -1) {
+	myerrno = errno;
+	uerror = "Error cleaning up child process";
+	goto error;
+    }
+    pid = 0;
+    if(WIFEXITED(status)) {
+	if((status = WEXITSTATUS(status)) != EXIT_SUCCESS) {
+	    uerror = alloca(strlen("Child process terminated with failure exit status: ") + 3 + 1);
+	    sprintf(uerror, "Child process terminated with failure exit status: %d", status);
+	    goto error;
+	} else if(result->result != PASS) {
+	    uerror = "Child process exited early";
+	    goto error;
+	}
+    } else if(WIFSIGNALED(status)) {
+	char *ss = strsignal(WTERMSIG(status));
+	uerror = alloca(strlen("Child process terminated on signal: ") + strlen(ss) + 1);
+	sprintf(uerror, "Child process terminated on signal: %s", ss);
+	goto error;
+    } else {
+	/* unknown state */
+	uerror = "Child process terminated in unknown state";
+	goto error;
+    }
+    /* Success! */
+    r = test_results_push(result);
+    if(r != 0) {
+	test_result_free(result);
+	return r;
+    }
+    return 0;
+
+error:
+    if(pid > 0) {
+	pid = waitpid(pid, &status, 0); /* ignore errors */
+    }
+    if(result->explanation != NULL) {
+	free(result->explanation);
+    }
+    if(myerrno != 0) {
+	char *se = strerror(errno);
+	result->explanation = malloc(strlen(uerror) + strlen(": ") + strlen(se) + 1);
+	if(result->explanation == NULL) {
+	    test_result_free(result);
+	    return -1;
+	}
+	sprintf(result->explanation, "%s: %s", uerror, se);
+    } else {
+	result->explanation = strdup(uerror);
+	if(result->explanation == NULL) {
+	    test_result_free(result);
+	    return -1;
+	}
+    }
+    result->result = UNRESOLVED;
+    r = test_results_push(result);
+    if(r != 0) {
+	test_result_free(result);
+	return r;
+    }
+    return 0;
+}
+
+void run_test_suite(void (*fixture)(void (*)()), const char **test_name, void (**test)()) {
+    int r;
+    for(; test_name != NULL; test_name++, test++) {
+	if(test == NULL) {
+	    r = no_test(test_name, UNTESTED, "No test defined");
+	} else {
+	    r = run_test(fixture, *test_name, *test);
+	}
+    }
+}
+
+int print_test_results() {
+    size_t nresults, passed = 0, failed = 0, unresolved = 0, untested = 0, unsupported = 0;
+    int r;
+    if(test_results != NULL) {
+	/* count results */
+	nresults = test_results->nresults;
+	int i;
+	for(i = 0; i < nrusults; i++) {
+	    switch(test_results->results[i]->result) {
+	    case PASS:
+		passed++;
+		continue;
+	    case FAIL:
+		failed++;
+		r = printf("FAIL: %s", test_results->results[i]->test_name);
+		if(r < 0) {
+		    return r;
+		}
+		break;
+	    case UNTESTED:
+		untested++;
+		r = printf("UNTESTED: %s", test_results->results[i]->test_name);
+		if(r < 0) {
+		    return r;
+		}
+		break;
+	    case UNSUPPORTED:
+		unsupported++;
+		r = printf("UNSUPPORTED: %s", test_results->results[i]->test_name);
+		if(r < 0) {
+		    return r;
+		}
+		break;
+	    case UNRESOLVED:
+	    default:
+		r = printf("UNRESOLVED: %s", test_results->results[i]->test_name);
+		if(r < 0) {
+		    return r;
+		}
+		unresolved++;
+	    }
+	    if(test_results->results[i]->explanation != NULL) {
+		r = printf(" (%s)", test_results->results[i]->explanation);
+		if(r < 0) {
+		    return r;
+		}
+	    }
+	    if(test_results->results[i]->file != NULL) {
+		r = printf(" after %s:%s", test_results->results[i]->file,
+			   test_results->results[i]->line);
+		if(r < 0) {
+		    return r;
+		}
+	    }
+	    r = printf("\n");
+	    if(r < 0) {
+		return r;
+	    }
+	}
+    }
+    printf("Passed: %z/%z, Failed: %z/%z, Unresolved: %z/%z, Untested: %z/%z, Unsupported: %z/%z\n",
+	   passed, nresults, failed, nresults, unresolved, nresults, untested, nresults, unsupported, nresults);
+}
+
+bool tests_succeeded() {
+   if(test_results == NULL) {
+       return true;
+   }
+   int i;
+   for(i = 0; i < nrusults; i++) {
+       if(test_results->results[i]->result != PASS) {
+	   return false;
+       }
+   }
+   return true;
+}

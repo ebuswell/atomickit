@@ -58,7 +58,6 @@ static inline void *atxn_item_init(struct atxn_item *item, void (*destroy)(struc
     return ATXN_ITEM2PTR(item);
 }
 
-/* Holds one reference to ptr; you have no references */
 static inline void atxn_init(atxn_t *txn, void *ptr) {
     if(ptr != NULL) {
 	atomic_fetch_add(&ATXN_PTR2ITEM(ptr)->txn_refcount, 1);
@@ -73,19 +72,15 @@ static inline void atxn_destroy(atxn_t *txn) {
 	int_fast8_t count = ATXN_PTR2COUNT(ptr);
 	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
 	count = atomic_fetch_add(&item->refcount, count) + count;
-	if(atomic_fetch_sub(&item->txn_refcount, 1) == 0)
+	if(atomic_fetch_sub(&item->txn_refcount, 1) - 1 == 0) {
 	    if(count == 0) {
 		item->destroy(item);
-	    } else if(atomic_load(&item->refcount) == 0
-		      && atomic_fetch_sub(&item->refcount, 1) == 0) {
+	    } else if(unlikely(atomic_load(&item->refcount) == 0)
+		      && likely(atomic_fetch_sub(&item->refcount, 1) == 0)) {
 		item->destroy(item);
 	    }
 	}
     }
-}
-
-static inline int_fast8_t atxn_count(atxn_t *txn) {
-    return ATXN_PTR2COUNT(atomic_ptr_load(&txn->ptr));
 }
 
 static inline void *atxn_acquire(volatile atxn_t *txn) {
@@ -97,9 +92,10 @@ static inline bool atxn_check(volatile atxn_t *txn, void *ptr) {
 }
 
 static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
-    /* Is the ptr still valid? then just decrement it. */
+    /* Is the ptr still valid? then just decrement it, provided it's
+     * count is at least 1. */
     void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
-    while(ATXN_PTRDECOUNT(localptr) == ptr) {
+    while(ATXN_PTRDECOUNT(localptr) == ptr && ATXN_PTR2COUNT(localptr) != 0) {
 	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1,
 							    memory_order_seq_cst, memory_order_relaxed))) {
 	    /* Success! */
@@ -107,18 +103,7 @@ static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
 	}
     }
     /* Nope.  Try next method. */
-    if(ptr != NULL) {
-	/* if count is not transferred before this call, count will go
-	 * negative instead of 0 and the transferer will be
-	 * responsible for freeing the variable, if needed. */
-	struct atxn_item *item = ATXN_PTR2ITEM(ptr);
-	int_fast8_t count = atomic_fetch_sub(&item->refcount, 1) - 1;
-	if(count == 0 && atomic_load(&item->txn_refcount) == 0) {
-	    if(atomic_fetch_sub(&item->refcount, 1) == 0) {
-		item->destroy(item);
-	    }
-	}
-    }
+    atxn_item_release(ptr);
 }
 
 static inline void atxn_item_release(void *ptr) {
@@ -129,7 +114,7 @@ static inline void atxn_item_release(void *ptr) {
 	struct atxn_item *item = ATXN_PTR2ITEM(ptr);
 	int_fast8_t count = atomic_fetch_sub(&item->refcount, 1) - 1;
 	if(count == 0 && atomic_load(&item->txn_refcount) == 0) {
-	    if(atomic_fetch_sub(&item->refcount, 1) == 0) {
+	    if(likely(atomic_fetch_sub(&item->refcount, 1) == 0)) {
 		item->destroy(item);
 	    }
 	}
