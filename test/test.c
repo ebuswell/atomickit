@@ -318,15 +318,31 @@ error:
 }
 
 int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)()) {
-    int r = 0;
+    int r;
     for(; *test_name != NULL; test_name++, test++) {
 	if(*test == NULL) {
 	    r = no_test(*test_name, UNTESTED, "No test defined");
 	} else {
 	    r = run_test(fixture, *test_name, *test);
 	}
+	if(r != 0) {
+	    char *explanation = strdup("Test framework failed to record result");
+	    if(explanation == NULL) {
+		return -1;
+	    }
+	    struct test_result *myresult = test_result_create(test_name, UNRESOLVED, explanation, NULL, NULL);
+	    if(myresult == NULL) {
+		free(explanation);
+		return -1;
+	    }
+	    r = test_results_push(myresult);
+	    if(r != 0) {
+		test_result_free(myresult);
+		return r;
+	    }
+	}
     }
-    return r;
+    return 0;
 }
 
 int print_test_results() {
@@ -372,14 +388,14 @@ int print_test_results() {
 		file = "<unknown>";
 		line = "0";
 	    }
-	    r = printf("%s:%s: %s:%s", file, line, status, test_results->results[i]->test_name);
+	    r = fprintf(stderr, "%s:%s: %s:%s", file, line, status, test_results->results[i]->test_name);
 	    if(test_results->results[i]->explanation != NULL) {
-		r = printf(": %s", test_results->results[i]->explanation);
+		r = fprintf(stderr, ": %s", test_results->results[i]->explanation);
 		if(r < 0) {
 		    return r;
 		}
 	    }
-	    r = printf("\n");
+	    r = fprintf(stderr, "\n");
 	    if(r < 0) {
 		return r;
 	    }

@@ -91,21 +91,6 @@ static inline bool atxn_check(volatile atxn_t *txn, void *ptr) {
     return ATXN_PTRDECOUNT(atomic_ptr_load(&txn->ptr)) == ptr;
 }
 
-static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
-    /* Is the ptr still valid? then just decrement it, provided it's
-     * count is at least 1. */
-    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
-    while(ATXN_PTRDECOUNT(localptr) == ptr && ATXN_PTR2COUNT(localptr) != 0) {
-	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1,
-							    memory_order_seq_cst, memory_order_relaxed))) {
-	    /* Success! */
-	    return;
-	}
-    }
-    /* Nope.  Try next method. */
-    atxn_item_release(ptr);
-}
-
 static inline void atxn_item_release(void *ptr) {
     if(ptr != NULL) {
 	/* if count is not transferred before this call, count will go
@@ -121,6 +106,20 @@ static inline void atxn_item_release(void *ptr) {
     }
 }
 
+static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
+    /* Is the ptr still valid? then just decrement it, provided it's
+     * count is at least 1. */
+    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
+    while(ATXN_PTRDECOUNT(localptr) == ptr && ATXN_PTR2COUNT(localptr) != 0) {
+	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1,
+							    memory_order_seq_cst, memory_order_relaxed))) {
+	    /* Success! */
+	    return;
+	}
+    }
+    /* Nope.  Try next method. */
+    atxn_item_release(ptr);
+}
 
 /* References are untouched. */
 static inline bool atxn_commit(volatile atxn_t *txn, void *oldptr, void *newptr) {

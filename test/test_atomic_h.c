@@ -282,6 +282,7 @@ int run_atomic_h_test_suite() {
     if(r != 0) {
 	return r;
     }
+
     void (*atomic_int_tests[])() = { test_atomic_store_explicit, test_atomic_store,
 				     test_atomic_load_explicit, test_atomic_load,
 				     test_atomic_exchange_explicit, test_atomic_exchange,
@@ -307,7 +308,7 @@ int run_atomic_h_test_suite() {
 				      "atomic_fetch_and_explicit","atomic_fetch_and", NULL };
     r = run_test_suite(test_atomic_int_fixture, atomic_int_test_names, atomic_int_tests);
     if(r != 0) {
-    	return r;
+	return r;
     }
 
     void (*atomic_flag_unset_tests[])() = { test_atomic_flag_test_and_set_explicit,
@@ -316,9 +317,9 @@ int run_atomic_h_test_suite() {
     char *atomic_flag_unset_test_names[] = { "atomic_flag_test_and_set_explicit",
 					     "atomic_flag_test_and_set", NULL };
     r = run_test_suite(test_atomic_flag_unset_fixture, atomic_flag_unset_test_names,
-    		       atomic_flag_unset_tests);
+		       atomic_flag_unset_tests);
     if(r != 0) {
-    	return r;
+	return r;
     }
 
     void (*atomic_flag_set_tests[])() = { test_atomic_flag_clear_explicit,
@@ -327,10 +328,10 @@ int run_atomic_h_test_suite() {
     char *atomic_flag_set_test_names[] = { "atomic_flag_test_and_clear_explicit",
     					   "atomic_flag_test_and_clear", NULL };
     r = run_test_suite(test_atomic_flag_set_fixture, atomic_flag_set_test_names,
-    		       atomic_flag_set_tests);
+		       atomic_flag_set_tests);
     if(r != 0) {
-    	return r;
+	return r;
     }
-    
-    return 0;
+
+    return r;
 }
