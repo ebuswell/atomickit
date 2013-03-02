@@ -47,7 +47,7 @@ bool tests_succeeded();
 #define ASSERT(assertion)						\
     do {								\
 	CHECKPOINT();							\
-	if(!assertion) {						\
+	if(!(assertion)) {						\
 	    if(fprintf(test_writer, "FAIL:Assertion failed: %s\n", #assertion) < 0) { \
 		fclose(test_writer);					\
 		exit(EXIT_FAILURE);					\
@@ -62,7 +62,7 @@ bool tests_succeeded();
 #define FAIL(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "FAIL:%s\n", reason) < 0) {		\
+	if(fprintf(test_writer, "FAIL:%s\n", (reason)) < 0) {		\
 	    fclose(test_writer);					\
 	    exit(EXIT_FAILURE);						\
 	}								\
@@ -75,7 +75,7 @@ bool tests_succeeded();
 #define UNRESOLVED(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNRESOLVED:%s\n", reason) < 0) {	\
+	if(fprintf(test_writer, "UNRESOLVED:%s\n", (reason)) < 0) {	\
 	    fclose(test_writer);					\
 	    exit(EXIT_FAILURE);						\
 	}								\
@@ -88,7 +88,7 @@ bool tests_succeeded();
 #define UNTESTED(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNTESTED:%s\n", reason) < 0) {	\
+	if(fprintf(test_writer, "UNTESTED:%s\n", (reason)) < 0) {	\
 	    fclose(test_writer);					\
 	    exit(EXIT_FAILURE);						\
 	}								\
@@ -101,7 +101,7 @@ bool tests_succeeded();
 #define UNSUPPORTED(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNSUPPORTED:%s\n", reason) < 0) {	\
+	if(fprintf(test_writer, "UNSUPPORTED:%s\n", (reason)) < 0) {	\
 	    fclose(test_writer);					\
 	    exit(EXIT_FAILURE);						\
 	}								\
@@ -115,7 +115,7 @@ bool tests_succeeded();
 #define PASS(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "PASS:%s\n", reason) < 0) {	\
+	if(fprintf(test_writer, "PASS:%s\n", (reason)) < 0) {	\
 	    fclose(test_writer);					\
 	    exit(EXIT_FAILURE);						\
 	}								\
