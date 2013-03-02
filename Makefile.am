@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
 
-MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing src/config.h.in~
+MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing include/config.h.in~
 EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign
 
@@ -28,8 +28,8 @@ libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
 
-check_PROGRAMS = test
-test_SOURCES = src/test.c
-test_LDFLAGS = $(LD_FLAGS)
-test_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
-TESTS = test
+check_PROGRAMS = unittest
+unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c
+unittest_LDFLAGS = $(LD_FLAGS)
+unittest_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
+TESTS = unittest

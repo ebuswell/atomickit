@@ -1,4 +1,4 @@
-/* src/config.h.in.  Generated from configure.ac by autoheader.  */
+/* include/config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define if compiling for an x86 or x86_64/amd64 target. */
 #undef ARCH_X86

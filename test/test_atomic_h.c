@@ -84,58 +84,30 @@ static void test_atomic_signal_fence() {
 static void test_atomic_is_lock_free() {
     _Bool b;
     CHECKPOINT();
-    if(b = atomic_is_lock_free(&abool)) {
-	ASSERT(ATOMIC_BOOL_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_BOOL_LOCK_FREE);
-    }
-    CHECKPOINT();
-    if(b = atomic_is_lock_free(&achar)) {
-	ASSERT(ATOMIC_CHAR_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_CHAR_LOCK_FREE);
-    }
-    CHECKPOINT();
+    b = atomic_is_lock_free(&abool);
+    ASSERT(!b == !ATOMIC_BOOL_LOCK_FREE);
+    b = atomic_is_lock_free(&achar);
+    ASSERT(!b == !ATOMIC_CHAR_LOCK_FREE);
     b = atomic_is_lock_free(&aschar);
     CHECKPOINT();
     b = atomic_is_lock_free(&auchar);
     CHECKPOINT();
-    if(b = atomic_is_lock_free(&ashort)) {
-	ASSERT(ATOMIC_SHORT_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_SHORT_LOCK_FREE);
-    }
-    CHECKPOINT();
+    b = atomic_is_lock_free(&ashort);
+    ASSERT(!b == !ATOMIC_SHORT_LOCK_FREE);
     b = atomic_is_lock_free(&aushort);
     CHECKPOINT();
-    if(b = atomic_is_lock_free(&aint)) {
-	ASSERT(ATOMIC_INT_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_INT_LOCK_FREE);
-    }
-    CHECKPOINT();
+    b = atomic_is_lock_free(&aint);
+    ASSERT(!b == !ATOMIC_INT_LOCK_FREE);
     b = atomic_is_lock_free(&auint);
     CHECKPOINT();
-    if(b = atomic_is_lock_free(&along)) {
-	ASSERT(ATOMIC_LONG_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_LONG_LOCK_FREE);
-    }
-    CHECKPOINT();
+    b = atomic_is_lock_free(&along);
+    ASSERT(!b == !ATOMIC_LONG_LOCK_FREE);
     b = atomic_is_lock_free(&aulong);
     CHECKPOINT();
-    if(b = atomic_is_lock_free(&awchar)) {
-	ASSERT(ATOMIC_WCHAR_T_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_WCHAR_T_LOCK_FREE);
-    }
-    CHECKPOINT();
-    if(b = atomic_is_lock_free(&aintptr)) {
-	ASSERT(ATOMIC_POINTER_LOCK_FREE);
-    } else {
-	ASSERT(!ATOMIC_POINTER_LOCK_FREE);
-    }
-    CHECKPOINT();
+    b = atomic_is_lock_free(&awchar);
+    ASSERT(!b == !ATOMIC_WCHAR_T_LOCK_FREE);
+    b = atomic_is_lock_free(&aintptr);
+    ASSERT(!b == !ATOMIC_POINTER_LOCK_FREE);
     b = atomic_is_lock_free(&auintptr);
     CHECKPOINT();
     b = atomic_is_lock_free(&asize);
@@ -171,7 +143,7 @@ static void test_atomic_load_explicit() {
 }
 
 static void test_atomic_load() {
-    ASSERT(atomic_load(&aint, memory_order_relaxed) == 21);
+    ASSERT(atomic_load(&aint) == 21);
 }
 
 static void test_atomic_exchange_explicit() {
@@ -195,7 +167,6 @@ static void test_atomic_compare_exchange_strong_explicit() {
     ASSERT(atomic_compare_exchange_strong_explicit(&aint, &r, 31, memory_order_relaxed, memory_order_relaxed));
     ASSERT(r == 21);
     ASSERT(atomic_load_explicit(&aint, memory_order_relaxed) == 31);
-    OK();
 }
 
 static void test_atomic_compare_exchange_strong() {
@@ -205,7 +176,6 @@ static void test_atomic_compare_exchange_strong() {
     ASSERT(atomic_compare_exchange_strong(&aint, &r, 31));
     ASSERT(r == 21);
     ASSERT(atomic_load_explicit(&aint, memory_order_relaxed) == 31);
-    OK();
 }
 
 static void test_atomic_compare_exchange_weak_explicit() {
@@ -215,7 +185,6 @@ static void test_atomic_compare_exchange_weak_explicit() {
     ASSERT(atomic_compare_exchange_weak_explicit(&aint, &r, 31, memory_order_relaxed, memory_order_relaxed));
     ASSERT(r == 21);
     ASSERT(atomic_load_explicit(&aint, memory_order_relaxed) == 31);
-    OK();
 }
 
 static void test_atomic_compare_exchange_weak() {
@@ -225,7 +194,6 @@ static void test_atomic_compare_exchange_weak() {
     ASSERT(atomic_compare_exchange_weak(&aint, &r, 31));
     ASSERT(r == 21);
     ASSERT(atomic_load_explicit(&aint, memory_order_relaxed) == 31);
-    OK();
 }
 
 static void test_atomic_fetch_add_explicit() {
@@ -271,41 +239,42 @@ static void test_atomic_fetch_and() {
 /*******************************************/
 
 static void test_atomic_flag_unset_fixture(void (*test)()) {
-    atomic_flag_init(&aflag);
+    atomic_flag_clear_explicit(&aflag, memory_order_relaxed);
     test();
 }
 
 static void test_atomic_flag_test_and_set_explicit() {
-    ASSERT(!atomic_flag_test_and_set_explicit(&memory_order_relaxed));
-    ASSERT(atomic_flag_test_and_set_explicit(&memory_order_relaxed));    
+    ASSERT(!atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));
+    ASSERT(atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));    
 }
 
 static void test_atomic_flag_test_and_set() {
-    ASSERT(!atomic_flag_test_and_set(&memory_order_relaxed));
-    ASSERT(atomic_flag_test_and_set(&memory_order_relaxed));    
+    ASSERT(!atomic_flag_test_and_set(&aflag));
+    ASSERT(atomic_flag_test_and_set(&aflag));    
 }
 
 /*******************************************/
 
 static void test_atomic_flag_set_fixture(void (*test)()) {
-    atomic_flag_init(&aflag);
-    atomic_flag_test_and_set(&memory_order_relaxed);
+    atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed);
     test();
 }
 
-static void test_atomic_flag_test_and_clear_explicit() {
-    ASSERT(atomic_flag_test_and_clear_explicit(&memory_order_relaxed));
-    ASSERT(!atomic_flag_test_and_clear_explicit(&memory_order_relaxed));    
+static void test_atomic_flag_clear_explicit() {
+    CHECKPOINT();
+    atomic_flag_clear_explicit(&aflag, memory_order_relaxed);
+    ASSERT(!atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));    
 }
 
-static void test_atomic_flag_test_and_set() {
-    ASSERT(atomic_flag_test_and_clear(&memory_order_relaxed));
-    ASSERT(!atomic_flag_test_and_clear(&memory_order_relaxed));
+static void test_atomic_flag_clear() {
+    CHECKPOINT();
+    atomic_flag_clear(&aflag);
+    ASSERT(!atomic_flag_test_and_set_explicit(&aflag, memory_order_relaxed));    
 }
 
 int run_atomic_h_test_suite() {
     int r;
-    void (*atomic_blank_tests)()[] = { test_atomic_init, test_atomic_thread_fence,
+    void (*atomic_blank_tests[])() = { test_atomic_init, test_atomic_thread_fence,
 				       test_atomic_signal_fence, test_atomic_is_lock_free, NULL };
     char *atomic_blank_test_names[] = { "atomic_init", "atomic_thread_fence",
 					"atomic_signal_fence", "atomic_is_lock_free", NULL };
@@ -313,7 +282,7 @@ int run_atomic_h_test_suite() {
     if(r != 0) {
 	return r;
     }
-    void (*atomic_int_tests)()[] = { test_atomic_store_explicit, test_atomic_store,
+    void (*atomic_int_tests[])() = { test_atomic_store_explicit, test_atomic_store,
 				     test_atomic_load_explicit, test_atomic_load,
 				     test_atomic_exchange_explicit, test_atomic_exchange,
 				     test_atomic_compare_exchange_strong_explicit,
@@ -324,7 +293,7 @@ int run_atomic_h_test_suite() {
 				     test_atomic_fetch_sub_explicit, test_atomic_fetch_sub,
 				     test_atomic_fetch_or_explicit, test_atomic_fetch_or,
 				     test_atomic_fetch_and_explicit,test_atomic_fetch_and, NULL};
-
+    
     char *atomic_int_test_names[] = { "atomic_store_explicit", "atomic_store",
 				      "atomic_load_explicit", "atomic_load",
 				      "atomic_exchange_explicit", "atomic_exchange",
@@ -338,29 +307,29 @@ int run_atomic_h_test_suite() {
 				      "atomic_fetch_and_explicit","atomic_fetch_and", NULL };
     r = run_test_suite(test_atomic_int_fixture, atomic_int_test_names, atomic_int_tests);
     if(r != 0) {
-	return r;
+    	return r;
     }
 
-    void (*atomic_flag_unset_tests)()[] = { test_atomic_flag_test_and_set_explicit,
+    void (*atomic_flag_unset_tests[])() = { test_atomic_flag_test_and_set_explicit,
 					    test_atomic_flag_test_and_set, NULL };
     
     char *atomic_flag_unset_test_names[] = { "atomic_flag_test_and_set_explicit",
 					     "atomic_flag_test_and_set", NULL };
     r = run_test_suite(test_atomic_flag_unset_fixture, atomic_flag_unset_test_names,
-		       atomic_flag_unset_tests);
+    		       atomic_flag_unset_tests);
     if(r != 0) {
-	return r;
+    	return r;
     }
 
-    void (*atomic_flag_set_tests)()[] = { test_atomic_flag_test_and_clear_explicit,
-					    test_atomic_flag_test_and_clear, NULL };
+    void (*atomic_flag_set_tests[])() = { test_atomic_flag_clear_explicit,
+					  test_atomic_flag_clear, NULL };
     
     char *atomic_flag_set_test_names[] = { "atomic_flag_test_and_clear_explicit",
-					     "atomic_flag_test_and_clear", NULL };
+    					   "atomic_flag_test_and_clear", NULL };
     r = run_test_suite(test_atomic_flag_set_fixture, atomic_flag_set_test_names,
-		       atomic_flag_set_tests);
+    		       atomic_flag_set_tests);
     if(r != 0) {
-	return r;
+    	return r;
     }
     
     return 0;

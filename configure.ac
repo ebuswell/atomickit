@@ -26,7 +26,7 @@ AC_PREREQ([2.65])
 AC_INIT([atomickit], ATOMICKIT_VERSION, [ebuswell@gmail.com])
 AM_INIT_AUTOMAKE([-Wall foreign])
 AC_CONFIG_SRCDIR([include/atomickit/atomic.h])
-AC_CONFIG_HEADERS([src/config.h])
+AC_CONFIG_HEADERS([include/config.h])
 AC_CANONICAL_HOST
 
 [ATOMICKIT_VERSION]=ATOMICKIT_VERSION

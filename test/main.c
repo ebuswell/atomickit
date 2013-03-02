@@ -2,7 +2,7 @@
 
 int run_atomic_h_test_suite();
 
-int main(int argc, char **argv) {
+int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
     int r;
 
     r = run_atomic_h_test_suite();
