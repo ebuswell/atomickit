@@ -1,5 +1,5 @@
 /*
- * test.c
+ * test_atomic_h.c
  * 
  * Copyright 2013 Evan Buswell
  * 

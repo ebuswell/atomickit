@@ -1,7 +1,17 @@
-/*
- * atomic-queue.h
- * 
- * Copyright 2012 Evan Buswell
+/** @file atomic-queue.h
+ * Atomic Queue
+ *
+ * Implements an unlimited lock free FIFO queue with reference counted
+ * items.  Each item should be enqueued in exactly one queue.  The
+ * queue will hold a reference to the last dequeued item until the
+ * next item is dequeued.
+ *
+ * This algorithm is a slightly simplified version of Maged M. Michael
+ * and Michael L. Scott, "Simple, Fast, and Practical Non-Blocking and
+ * Blocking Concurrent Queue Algorithms," PODC 1996.
+ */
+/* 
+ * Copyright 2013 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -17,27 +27,42 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
-/*
- * This algorithm is from Maged M. Michael and Michael L. Scott,
- * "Simple, Fast, and Practical Non-Blocking and Blocking Concurrent
- * Queue Algorithms," PODC 1996.
- */
 #ifndef ATOMICKIT_ATOMIC_QUEUE_H
 #define ATOMICKIT_ATOMIC_QUEUE_H 1
 
 #include <atomickit/spinlock.h>
 
+/**
+ * The size of the aqueue_node that is not the user data.
+ */
+#define AQUEUE_NODE_OVERHEAD (sizeof(struct aqueue_node) - 1)
+
+/**
+ * Queue node
+ *
+ * Good code will not depend on the contents of this struct.
+ */
 struct aqueue_node_ptr {
-    void (*destroy)(struct aqueue_node *);
-    atxn_t next;
-    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN)));
+    void (*destroy)(struct aqueue_node *); /** pointer to user provided destruction function */
+    atxn_t next; /** the next item in the queue */
+    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** user-defined data area */
 };
 
+/**
+ * Sentinel node
+ *
+ * Used for the initial contents of an empty queue.
+ */
 struct aqueue_sentinel_node_ptr {
-    void (*destroy)(struct aqueue_node *);
-    atxn_t next;
+    void (*destroy)(struct aqueue_node *); /** pointer to user provided destruction function */
+    atxn_t next; /** the next item in the queue */
 };
 
+/**
+ * Queue node, low-level
+ *
+ * This is essentially a queue node in a `struct atxn_item` wrapper.
+ */
 struct aqueue_node {
     void (*destroy)(struct aqueue_node *);
     volatile atomic_int_fast8_t refcount;
@@ -45,6 +70,11 @@ struct aqueue_node {
     struct aqueue_node_ptr nodeptr __attribute__((aligned(ATXN_ALIGN)));
 };
 
+/**
+ * Sentinel node, low-level
+ *
+ * This is essentially a sentinel node in a `struct atxn_item` wrapper.
+ */
 struct aqueue_sentinel_node {
     void (*destroy)(struct aqueue_node *);
     volatile atomic_int_fast8_t refcount;
@@ -52,10 +82,18 @@ struct aqueue_sentinel_node {
     struct aqueue_sentinel_node_ptr nodeptr __attribute__((aligned(ATXN_ALIGN)));
 };
 
-
+/**
+ * Get the node for the corresponding node data.
+ */
 #define AQUEUE_PTR2NODEPTR(ptr) ((struct aqueue_node_ptr *) (((intptr_t) (ptr)) - (offsetof(struct aqueue_node_ptr, data))))
+/**
+ * Get the node data for the corresponding node.
+ */
 #define AQUEUE_NODEPTR2PTR(item) ((void *) (((intptr_t) (item)) + (offsetof(struct aqueue_node_ptr, data))))
 
+/**
+ * Atomic Queue.
+ */
 typedef struct {
     atxn_t head;
     atxn_t tail;
@@ -66,6 +104,22 @@ static void __aqueue_node_destroy(struct aqueue_node *node) {
     node->nodeptr.destroy(node);
 }
 
+/**
+ * Initializes a queue node and returns a pointer to its coresponding
+ * memory region.
+ *
+ * The node has a single reference at this point, belonging to the
+ * calling function.
+ *
+ * @param node a pointer to a queue node.  This is typically allocated
+ * with `malloc(AQUEUE_NODE_OVERHEAD + <user data size>).
+ * @param destroy pointer to a function that will destroy the
+ * allocated node once it is no longer in use.  If no cleanup is
+ * needed, this could just be `free`.
+ *
+ * @returns a pointer to the memory region that corresponds with the
+ * node.
+ */
 static inline void *aqueue_node_init(struct aqueue_node *node, void (*destroy)(struct aqueue_node *)) {
     struct aqueue_node_ptr *node_ptr = atxn_item_init(node, __aqueue_node_destroy);
     node_ptr->destroy = destroy;
@@ -73,15 +127,35 @@ static inline void *aqueue_node_init(struct aqueue_node *node, void (*destroy)(s
     return AQUEUE_NODEPTR2PTR(node_ptr);
 }
 
+/**
+ * Releases a reference to a queue node.
+ *
+ * @param item the pointer to release a reference to.
+ */
 static inline void aqueue_node_release(void *item) {
     atxn_item_release(AQUEUE_PTR2NODEPTR(item));
 }
 
-static inline void aqueue_init(aqueue_t *aqueue, struct aqueue_sentinel_node *node) {
-    atxn_init(&aqueue->head, &node->nodeptr);
-    atxn_init(&aqueue->tail, &node->nodeptr);
+/**
+ * Initializes a queue.
+ *
+ * @param queue a pointer to the queue being initialized.
+ * @param node a pointer to the (zero-size) memory region
+ * corresponding to an already initialized `aqueue_sentinel_node`.
+ */
+static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
+    atxn_init(&aqueue->head, AQUEUE_PTR2NODEPTR(sentinel));
+    atxn_init(&aqueue->tail, AQUEUE_PTR2NODEPTR(sentinel));
 }
 
+/**
+ * Enqueues the given item.
+ *
+ * @param aqueue a pointer to the queue in which the item is being
+ * enqueued.
+ * @param item a pointer to the memory region corresponding to the
+ * item to enqueue.
+ */
 static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
     struct aqueue_node_ptr *nodeptr = AQUEUE_PTR2NODEPTR(item);
     struct aqueue_node_ptr *dummy = atxn_acquire(&nodeptr->next);
@@ -106,6 +180,15 @@ static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
     }
 }
 
+/**
+ * Dequeues an item.
+ *
+ * @param aqueue a pointer to the queue from which the item is being
+ * dequeued.
+ *
+ * @returns a pointer to the memory region corresponding to the
+ * dequeued item.
+ */
 static inline void *aqueue_deq(aqueue_t *aqueue) {
     struct aqueue_node_ptr *head;
     struct aqueue_node_ptr *next;

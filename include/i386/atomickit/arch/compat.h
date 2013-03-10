@@ -1,14 +1,17 @@
-/*
+/** @file compat.h
  * compat.h
- * 
- * Copyright 2012 Evan Buswell
- * Copyright 2012 Linus Torvalds et al.
+ *
+ * Compatibility functions for versions of C without C11 atomics.
  *
  * This file is a redaction of arch/x86/include/arch/cmpxchg.h and
  * some other files from the Linux Kernel.  In the future, someone
  * should make similar files for other architectures and compilers.
- * For now, though, we depend on x86 and gcc.  See the Linux
+ * For now, though, we depend on x86(_64) and gcc.  See the Linux
  * documentation for more information.
+ */
+/*
+ * Copyright 2013 Evan Buswell
+ * Copyright 2012 Linus Torvalds et al.
  *
  * This file is part of Atomic Kit.
  * 
@@ -35,11 +38,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#if __GNUC__ < 4 || \
-    (__GNUC__ == 4 && (__GNUC_MINOR < 3))
-#define __error__(x)
-#endif
 
 #define ATOMIC_BOOL_LOCK_FREE true
 #define ATOMIC_CHAR_LOCK_FREE true
@@ -70,10 +68,10 @@ typedef struct {
  * (or compile-time if the compiler implements __compiletime_error().
  */
 extern void __AK_wrong_size(void)
-    __attribute__((__error__("Bad argument size")));
+    __attribute__((error("Bad argument size")));
 
 extern void __AK_64not_implemented(void)
-    __attribute__((__error__("64 bit on 32 bit architecture not yet implemented")));
+    __attribute__((error("64 bit on 32 bit architecture not yet implemented")));
 
 #define ATOMIC_VAR_INIT(/* C */ value) { (value) }
 
@@ -875,4 +873,4 @@ typedef struct {
 #define atomic_flag_clear(/* volatile atomic_flag * */ object) \
     atomic_flag_clear_explicit((object), memory_order_seq_cst)
 
-#endif /* ! ATOMICKIT_ARCH_ATOMIC_H */
+#endif /* ! ATOMICKIT_ARCH_COMPAT_H */

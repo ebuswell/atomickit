@@ -1,14 +1,17 @@
-/*
+/** @file compat.h
  * compat.h
- * 
- * Copyright 2012 Evan Buswell
- * Copyright 2012 Linus Torvalds et al.
+ *
+ * Compatibility functions for versions of C without C11 atomics.
  *
  * This file is a redaction of arch/x86/include/arch/cmpxchg.h and
  * some other files from the Linux Kernel.  In the future, someone
  * should make similar files for other architectures and compilers.
- * For now, though, we depend on x86 and gcc.  See the Linux
+ * For now, though, we depend on x86(_64) and gcc.  See the Linux
  * documentation for more information.
+ */
+/*
+ * Copyright 2013 Evan Buswell
+ * Copyright 2012 Linus Torvalds et al.
  *
  * This file is part of Atomic Kit.
  * 
@@ -870,4 +873,4 @@ typedef struct {
 #define atomic_flag_clear(/* volatile atomic_flag * */ object) \
     atomic_flag_clear_explicit((object), memory_order_seq_cst)
 
-#endif /* ! ATOMICKIT_ARCH_ATOMIC_H */
+#endif /* ! ATOMICKIT_ARCH_COMPAT_H */

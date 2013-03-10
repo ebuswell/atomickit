@@ -1,14 +1,14 @@
-/*
- * atomic-pointer.h
- * 
- * Copyright 2012 Evan Buswell
- * Copyright 2010 Linus Torvalds et al.
+/** @file atomic-pointer.h
+ * Atomic Pointers
  *
- * This file is a redaction of arch/x86/include/atomic*.h and some
- * other files from the Linux Kernel.  In the future, someone should
- * make similar files for other architectures.  For now, though, we
- * depend on x86.  See the Linux documentation for more information.
- * 
+ * C11-like atomic functions for pointers.  These should be usable
+ * just like the corresponding C11 atomic functions, with `volatile
+ * atomic_ptr *` and such substituted for the usual `volatile <atomic
+ * type> *`.
+ */
+/* 
+ * Copyright 2013 Evan Buswell
+ *
  * This file is part of Atomic Kit.
  * 
  * Atomic Kit is free software: you can redistribute it and/or modify

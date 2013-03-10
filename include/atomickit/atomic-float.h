@@ -1,12 +1,15 @@
-/*
- * atomic-float.h
- * 
- * Copyright 2012 Evan Buswell
+/** @file atomic-float.h
+ * Atomic Floats
  *
- * This file is a redaction of arch/x86/include/atomic*.h and some
- * other files from the Linux Kernel.  In the future, someone should
- * make similar files for other architectures.  For now, though, we
- * depend on x86.  See the Linux documentation for more information.
+ * C11-like atomic functions for floating point numbers.  These should
+ * be usable just like the corresponding C11 atomic functions, with
+ * `volatile atomic_float *` and such substituted for the usual
+ * `volatile <atomic type> *`.  Atomic add and subtract are not
+ * included since these are would not be generically possible without
+ * locks.
+ */
+/*
+ * Copyright 2013 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 

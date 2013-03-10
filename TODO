@@ -1,1 +1,3 @@
-* Write a TODO list
+* Write unit tests for and then actually test atomic_queue
+* Write multithreaded unit tests
+* Write a real TODO list
