@@ -65,8 +65,8 @@ static void *item2_ptr;
 
 /*************************/
 static void test_atxn_uninit_fixture(void (*test)()) {
-    item1 = alloca(sizeof(struct atxn_item) + 14 - 1);
-    item2 = alloca(sizeof(struct atxn_item) + 14 - 1);
+    item1 = alloca(ATXN_ITEM_OVERHEAD + 14);
+    item2 = alloca(ATXN_ITEM_OVERHEAD + 14);
     strcpy((char *) item1->data, ptrtest.string1);
     strcpy((char *) item2->data, ptrtest.string2);
     test();
@@ -81,8 +81,8 @@ static void test_atxn_item_init() {
 
 /****************************/
 static void test_atxn_init_item_fixture(void (*test)()) {
-    item1 = alloca(sizeof(struct atxn_item) + 14 - 1);
-    item2 = alloca(sizeof(struct atxn_item) + 14 - 1);
+    item1 = alloca(ATXN_ITEM_OVERHEAD + 14);
+    item2 = alloca(ATXN_ITEM_OVERHEAD + 14);
     strcpy((char *) item1->data, ptrtest.string1);
     strcpy((char *) item2->data, ptrtest.string2);
     item1_ptr = atxn_item_init(item1, destroy_item1);
@@ -102,8 +102,8 @@ static void test_atxn_init() {
 /****************************/
 
 static void test_atxn_init_fixture(void (*test)()) {
-    item1 = alloca(sizeof(struct atxn_item) + 14 - 1);
-    item2 = alloca(sizeof(struct atxn_item) + 14 - 1);
+    item1 = alloca(ATXN_ITEM_OVERHEAD + 14);
+    item2 = alloca(ATXN_ITEM_OVERHEAD + 14);
     strcpy((char *) item1->data, ptrtest.string1);
     strcpy((char *) item2->data, ptrtest.string2);
     item1_ptr = atxn_item_init(item1, destroy_item1);

@@ -10,7 +10,7 @@
  * and Michael L. Scott, "Simple, Fast, and Practical Non-Blocking and
  * Blocking Concurrent Queue Algorithms," PODC 1996.
  */
-/* 
+/*
  * Copyright 2013 Evan Buswell
  * 
  * This file is part of Atomic Kit.
