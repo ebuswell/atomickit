@@ -63,15 +63,20 @@ typedef struct {
     uint16_t counter;
 } atomic_flag;
 
+#if __GNUC__ < 4 || \
+    (__GNUC__ == 4 && (__GNUC_MINOR < 3))
+#define __error__(x)
+#endif
+
 /*
  * Non-existant functions to indicate usage errors at link time
  * (or compile-time if the compiler implements __compiletime_error().
  */
 extern void __AK_wrong_size(void)
-    __attribute__((error("Bad argument size")));
+    __attribute__((__error__("Bad argument size")));
 
 extern void __AK_64not_implemented(void)
-    __attribute__((error("64 bit on 32 bit architecture not yet implemented")));
+    __attribute__((__error__("64 bit on 32 bit architecture not yet implemented")));
 
 #define ATOMIC_VAR_INIT(/* C */ value) { (value) }
 
