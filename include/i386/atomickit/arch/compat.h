@@ -176,7 +176,15 @@ typedef struct {
 
 typedef struct {
     int_least16_t counter;
+} atomic_int_least16_t;
+
+typedef struct {
+    uint_least16_t counter;
 } atomic_uint_least16_t;
+
+typedef struct {
+    int_least32_t counter;
+} atomic_int_least32_t;
 
 typedef struct {
     uint_least32_t counter;
@@ -200,7 +208,15 @@ typedef struct {
 
 typedef struct {
     int_fast16_t counter;
+} atomic_int_fast16_t;
+
+typedef struct {
+    uint_fast16_t counter;
 } atomic_uint_fast16_t;
+
+typedef struct {
+    int_fast32_t counter;
+} atomic_int_fast32_t;
 
 typedef struct {
     uint_fast32_t counter;

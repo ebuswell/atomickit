@@ -74,7 +74,7 @@ static void test_atxn_uninit_fixture(void (*test)()) {
 
 static void test_atxn_item_init() {
     item1_ptr = atxn_item_init(item1, destroy_item1);
-    ASSERT(item1->destroy == destroy_item1);
+    ASSERT(item1->header.destroy == destroy_item1);
     ASSERT(&item1->data == item1_ptr);
     ASSERT(!item1_destroyed);
 }

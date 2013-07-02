@@ -349,7 +349,7 @@ int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)(
 	    if(explanation == NULL) {
 		return -1;
 	    }
-	    struct test_result *myresult = test_result_create(test_name, UNRESOLVED, explanation, NULL, NULL);
+	    struct test_result *myresult = test_result_create(*test_name, UNRESOLVED, explanation, NULL, NULL);
 	    if(myresult == NULL) {
 		free(explanation);
 		return -1;

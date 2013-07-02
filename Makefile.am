@@ -18,7 +18,7 @@
 
 MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing include/config.h.in~
 EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign serial-tests
 
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
@@ -29,7 +29,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = unittest
-unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_txn_h.c
+unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_txn_h.c test/test_atomic_queue_h.c
 unittest_LDFLAGS = $(LD_FLAGS)
 unittest_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 TESTS = unittest

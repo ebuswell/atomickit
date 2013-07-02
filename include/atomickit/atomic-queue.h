@@ -30,12 +30,14 @@
 #ifndef ATOMICKIT_ATOMIC_QUEUE_H
 #define ATOMICKIT_ATOMIC_QUEUE_H 1
 
-#include <atomickit/spinlock.h>
+#include <atomickit/atomic-txn.h>
 
 /**
  * The size of the aqueue_node that is not the user data.
  */
 #define AQUEUE_NODE_OVERHEAD (sizeof(struct aqueue_node) - 1)
+
+struct aqueue_node;
 
 /**
  * Queue node
@@ -121,7 +123,8 @@ static void __aqueue_node_destroy(struct aqueue_node *node) {
  * node.
  */
 static inline void *aqueue_node_init(struct aqueue_node *node, void (*destroy)(struct aqueue_node *)) {
-    struct aqueue_node_ptr *node_ptr = atxn_item_init(node, __aqueue_node_destroy);
+    struct aqueue_node_ptr *node_ptr = atxn_item_init((struct atxn_item *) node,
+						      (void (*)(struct atxn_item *)) __aqueue_node_destroy);
     node_ptr->destroy = destroy;
     atxn_init(&node_ptr->next, NULL);
     return AQUEUE_NODEPTR2PTR(node_ptr);
@@ -208,6 +211,21 @@ static inline void *aqueue_deq(aqueue_t *aqueue) {
 	atxn_release(&head->next, next);
 	atxn_release(&aqueue->head, head);
     }
+}
+
+/**
+ * Destroys a queue.
+ *
+ * @param queue a pointer to the queue being destroyed.
+ */
+static inline void aqueue_destroy(aqueue_t *aqueue) {
+    void *node;
+    while((node = aqueue_deq(aqueue)) != NULL) {
+	aqueue_node_release(node);
+    }
+    /* Now we should have one node left... */
+    atxn_destroy(&aqueue->head);
+    atxn_destroy(&aqueue->tail);
 }
 
 #endif /* ! ATOMICKIT_ATOMIC_QUEUE_H */
