@@ -65,7 +65,7 @@ static aqueue_t aqueue;
 
 static struct aqueue_node *node1;
 static struct aqueue_node *node2;
-static struct aqueue_sentinel_node *sentinel;
+static struct aqueue_node *sentinel;
 
 static void *node1_ptr;
 static void *node2_ptr;
@@ -75,7 +75,7 @@ static void *sentinel_ptr;
 static void test_aqueue_uninit_fixture(void (*test)()) {
     node1 = alloca(AQUEUE_NODE_OVERHEAD + 14);
     node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_sentinel_node));
+    sentinel = alloca(sizeof(struct aqueue_node) - 1);
     strcpy((char *) node1->nodeptr.data, ptrtest.string1);
     strcpy((char *) node2->nodeptr.data, ptrtest.string2);
     test();
@@ -83,7 +83,7 @@ static void test_aqueue_uninit_fixture(void (*test)()) {
 
 static void test_aqueue_node_init() {
     node1_ptr = aqueue_node_init(node1, destroy_node1);
-    ASSERT(node1->nodeptr.destroy == destroy_node1);
+    ASSERT(node1->nodeptr.header.destroy == destroy_node1);
     ASSERT(&node1->nodeptr.data == node1_ptr);
     ASSERT(!node1_destroyed);
 }
@@ -92,13 +92,13 @@ static void test_aqueue_node_init() {
 static void test_aqueue_init_node_fixture(void (*test)()) {
     node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
     node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_sentinel_node));
+    sentinel = alloca(sizeof(struct aqueue_node) - 1);
     strcpy((char *) node1->nodeptr.data, ptrtest.string1);
     strcpy((char *) node2->nodeptr.data, ptrtest.string2);
     
     node1_ptr = aqueue_node_init(node1, destroy_node1);
     node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init((struct aqueue_node *) sentinel, destroy_sentinel);
+    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
     test();
 }
 
@@ -122,12 +122,12 @@ static void test_aqueue_node_release_unenq() {
 static void test_aqueue_init_fixture(void (*test)()) {
     node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
     node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_sentinel_node));
+    sentinel = alloca(sizeof(struct aqueue_node) - 1);
     strcpy((char *) node1->nodeptr.data, ptrtest.string1);
     strcpy((char *) node2->nodeptr.data, ptrtest.string2);
     node1_ptr = aqueue_node_init(node1, destroy_node1);
     node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init((struct aqueue_node *) sentinel, destroy_sentinel);
+    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
     aqueue_init(&aqueue, sentinel_ptr);
     aqueue_node_release(sentinel_ptr);
     test();
@@ -164,12 +164,12 @@ static void test_aqueue_enq() {
 static void test_aqueue_full_fixture(void (*test)()) {
     node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
     node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_sentinel_node));
+    sentinel = alloca(sizeof(struct aqueue_node) - 1);
     strcpy((char *) node1->nodeptr.data, ptrtest.string1);
     strcpy((char *) node2->nodeptr.data, ptrtest.string2);
     node1_ptr = aqueue_node_init(node1, destroy_node1);
     node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init((struct aqueue_node *) sentinel, destroy_sentinel);
+    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
     aqueue_init(&aqueue, sentinel_ptr);
     aqueue_node_release(sentinel_ptr);
     aqueue_enq(&aqueue, node1_ptr);
