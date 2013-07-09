@@ -20,6 +20,10 @@ MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp inst
 EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign serial-tests
 
+lib_LTLIBRARIES = libatomickit.la
+libatomickit_la_SOURCES = src/malloc.c
+libatomickit_la_LDFLAGS = $(LDFLAGS) -L$(libdir) -export-dynamic -version_info @VERSION_INFO@
+libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
 libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-txn.h
@@ -30,6 +34,7 @@ nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = unittest
 unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_txn_h.c test/test_atomic_queue_h.c
-unittest_LDFLAGS = $(LD_FLAGS)
+unittest_LDADD = -latomickit
+unittest_LDFLAGS = $(LD_FLAGS) -rpath $(libdir)
 unittest_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 TESTS = unittest

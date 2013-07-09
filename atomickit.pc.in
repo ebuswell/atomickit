@@ -6,5 +6,5 @@ includedir=@includedir@
 Name: atomickit
 Description: Atomic Kit: functions for speed-conscious atomic datatypes
 Version: @ATOMICKIT_VERSION@
-Libs: -latomickit -lpthread
+Libs: -latomickit
 Cflags: @STDATOMIC_DEFINE@ -I${includedir} -I${includedir}/@HOST_ARCH@
