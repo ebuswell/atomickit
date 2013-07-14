@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
 
-MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing include/config.h.in~
+MAINTAINERCLEANFILES = aclocal.m4 config.guess config.sub configure depcomp install-sh ltmain.sh Makefile.in missing include/config.h.in~ compile
 EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign serial-tests
 
