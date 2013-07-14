@@ -25,6 +25,9 @@
 #include <errno.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <signal.h>
+#include <sys/select.h>
 
 #include "test.h"
 
@@ -182,7 +185,46 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	goto error;
     }
 
-    while(fgets(line, 256, reader) != NULL) {
+    struct timeval tv;
+    fd_set read_fds;
+    fd_set error_fds;
+
+    bool timeout = false;
+
+    for(;;) {
+	tv.tv_sec = 10;
+	tv.tv_usec = 0;
+	FD_ZERO(&read_fds);
+	FD_ZERO(&error_fds);
+	FD_SET(pipefd[0], &read_fds);
+	FD_SET(pipefd[0], &error_fds);
+	r = select(pipefd[0] + 1, &read_fds, NULL, &error_fds, &tv);
+	if(r < 0) {
+	    if(errno == EINTR || errno == EAGAIN) {
+		continue;
+	    } else {
+		uerror = "select failed";
+		goto error;
+	    }
+	}
+	if(r == 0) {
+	    timeout = true;
+	    result->status = UNRESOLVED;
+	    result->explanation = strdup("Timeout");
+	    if(result->explanation == NULL) {
+		uerror = "Could not strdup";
+		goto error;
+	    }
+	    r = kill(pid, SIGTERM);
+	    if(r != 0) {
+		uerror = "Kill after timeout failed";
+		goto error;
+	    }
+	    break;
+	}
+	if(fgets(line, 256, reader) == NULL) {
+	    break;
+	}
 	if((strlen(line) < 1)
 	   || (strcmp(line, "\n") == 0)) {
 	    /* blank line */
@@ -258,7 +300,7 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	    }
 	}
     }
-    if(ferror(reader)) {
+    if(!timeout && ferror(reader)) {
 	/* uhhh... */
 	myerrno = errno;
 	uerror = "Error when reading";
@@ -278,24 +320,26 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	goto error;
     }
     pid = 0;
-    if(WIFEXITED(status)) {
-	if((status = WEXITSTATUS(status)) != EXIT_SUCCESS) {
-	    uerror = alloca(strlen("Child process terminated with failure exit status: ") + 3 + 1);
-	    sprintf(uerror, "Child process terminated with failure exit status: %d", status);
+    if(!timeout) {
+	if(WIFEXITED(status)) {
+	    if((status = WEXITSTATUS(status)) != EXIT_SUCCESS) {
+		uerror = alloca(strlen("Child process terminated with failure exit status: ") + 3 + 1);
+		sprintf(uerror, "Child process terminated with failure exit status: %d", status);
+		goto error;
+	    } else if(result->explanation == NULL) {
+		uerror = "Child process exited early";
+		goto error;
+	    }
+	} else if(WIFSIGNALED(status)) {
+	    char *ss = strsignal(WTERMSIG(status));
+	    uerror = alloca(strlen("Child process terminated on signal: ") + strlen(ss) + 1);
+	    sprintf(uerror, "Child process terminated on signal: %s", ss);
 	    goto error;
-	} else if(result->explanation == NULL) {
-	    uerror = "Child process exited early";
+	} else {
+	    /* unknown state */
+	    uerror = "Child process terminated in unknown state";
 	    goto error;
 	}
-    } else if(WIFSIGNALED(status)) {
-	char *ss = strsignal(WTERMSIG(status));
-	uerror = alloca(strlen("Child process terminated on signal: ") + strlen(ss) + 1);
-	sprintf(uerror, "Child process terminated on signal: %s", ss);
-	goto error;
-    } else {
-	/* unknown state */
-	uerror = "Child process terminated in unknown state";
-	goto error;
     }
     /* Success! */
     r = test_results_push(result);

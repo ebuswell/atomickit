@@ -28,7 +28,7 @@
 /* These things look like simple parameters, but if you change them
  * beware the bit twiddling... */
 #define PAGE_SIZE 4096
-#define PAGE_CEIL(size) ((size) + (size) % PAGE_SIZE)
+#define PAGE_CEIL(size) (((((size) - 1) >> 12) + 1) << 12)
 #define MIN_SIZE 16
 #define MIN_SIZE_LOG2 4
 #define NSIZES 8
@@ -182,7 +182,7 @@ static void fstack_push(int bin, void *ptr) {
 	/* Get the top of the stack; we have to update reference count
 	 * since we act like pop if there's more than our own
 	 * reference count. */
-	void *next = atomic_ptr_fetch_add(&glbl_fstack[bin], 1);
+	void *next = atomic_ptr_fetch_add(&glbl_fstack[bin], 1) + 1;
 	if(PTR_DECOUNT(next) == NULL) {
 	    /* This is the only item that will be on the stack. */
 	    new_item->next = NULL;
