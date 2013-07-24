@@ -119,7 +119,7 @@ static void test_atxn_destroy() {
     ASSERT(!item1_destroyed);
     atxn_init(&atxn, item1_ptr);
     CHECKPOINT();
-    atxn_item_release(item1_ptr);
+    atxn_release(item1_ptr);
     CHECKPOINT();
     atxn_destroy(&atxn);
     ASSERT(item1_destroyed);
@@ -135,20 +135,20 @@ static void test_atxn_acquire() {
     ASSERT(ptr2 == item1_ptr);
     ASSERT(strcmp(ptr1, ptr2) == 0);
     ASSERT(strcmp(ptr1, ptrtest.string1) == 0);
-    atxn_release(&atxn, ptr1);
+    atxn_release(ptr1);
     CHECKPOINT();
-    atxn_release(&atxn, ptr2);
+    atxn_release(ptr2);
     ASSERT(!item1_destroyed);
 }
 
-static void test_atxn_item_release() {
-    atxn_item_release(item1_ptr);
+static void test_atxn_release() {
+    atxn_release(item1_ptr);
     ASSERT(!item1_destroyed);
     item1_ptr = atxn_acquire(&atxn);
     CHECKPOINT();
     atxn_destroy(&atxn);
     CHECKPOINT();
-    atxn_item_release(item1_ptr);
+    atxn_release(item1_ptr);
     ASSERT(item1_destroyed);
 }
 
@@ -175,36 +175,6 @@ static void test_atxn_check() {
     ASSERT(!atxn_check(&atxn, item1_ptr));
 }
 
-static void test_atxn_release() {
-    CHECKPOINT();
-    atxn_item_release(item1_ptr);
-    /* current */
-    CHECKPOINT();
-    void *ptr1 = atxn_acquire(&atxn);
-    CHECKPOINT();
-    void *ptr2 = atxn_acquire(&atxn);
-    CHECKPOINT();
-    atxn_release(&atxn, ptr1);
-    ASSERT(!item1_destroyed);
-    ASSERT(!item2_destroyed);
-    atxn_release(&atxn, ptr2);
-    ASSERT(!item1_destroyed);
-    ASSERT(!item2_destroyed);
-    /* not current */
-    ptr1 = atxn_acquire(&atxn);
-    CHECKPOINT();
-    ptr2 = atxn_acquire(&atxn);
-    CHECKPOINT();
-    ASSERT(atxn_commit(&atxn, item1_ptr, item2_ptr));
-    CHECKPOINT();
-    atxn_release(&atxn, ptr1);
-    ASSERT(!item1_destroyed);
-    ASSERT(!item2_destroyed);
-    atxn_release(&atxn, ptr2);
-    ASSERT(item1_destroyed);
-    ASSERT(!item2_destroyed);
-}
-
 int run_atomic_txn_h_test_suite() {
     int r;
     void (*atxn_uninit_tests[])() = { test_atxn_item_init, NULL };
@@ -215,15 +185,15 @@ int run_atomic_txn_h_test_suite() {
     }
 
     void (*atxn_init_item_tests[])() = { test_atxn_init, NULL };
-    char *atxn_init_item_test_names[] = { "atxn_item_init", NULL };
+    char *atxn_init_item_test_names[] = { "atxn_init", NULL };
     r = run_test_suite(test_atxn_init_item_fixture, atxn_init_item_test_names, atxn_init_item_tests);
     if(r != 0) {
 	return r;
     }
 
-    void (*atxn_init_tests[])() = { test_atxn_destroy, test_atxn_acquire, test_atxn_item_release,
+    void (*atxn_init_tests[])() = { test_atxn_destroy, test_atxn_acquire,
 				    test_atxn_commit, test_atxn_check, test_atxn_release, NULL };
-    char *atxn_init_test_names[] = { "atxn_destroy", "atxn_acquire", "atxn_item_release",
+    char *atxn_init_test_names[] = { "atxn_destroy", "atxn_acquire",
 				     "atxn_commit", "atxn_check", "atxn_release", NULL };
     r = run_test_suite(test_atxn_init_fixture, atxn_init_test_names, atxn_init_tests);
     if(r != 0) {

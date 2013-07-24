@@ -77,12 +77,13 @@ struct atxn_item;
  */
 struct atxn_item_header {
     void (*destroy)(struct atxn_item *); /** Pointer to a destruction function */
-    volatile atomic_uint_fast16_t refcount; /** High 8 bits, number of
-					     * transactions in which
-					     * this is referenced; low
-					     * 8 bits, the number of
-					     * individual references to
-					     * this item. */
+    volatile atomic_uint_fast32_t refcount; /** High 16 bits, number
+					     * of transactions in
+					     * which this is
+					     * referenced; low 16
+					     * bits, the number of
+					     * individual references
+					     * to this item. */
 };
 
 /**
@@ -103,12 +104,12 @@ struct atxn_item {
 /**
  * The size of the atxn_item that is not the user data.
  */
-#define ATXN_ITEM_OVERHEAD (sizeof(struct atxn_item) - 1)
+#define ATXN_ITEM_OVERHEAD (offsetof(struct atxn_item, data))
 
 /* The mask for the transaction count. */
 #define ATXN_COUNTMASK ((intptr_t) (ATXN_ALIGN - 1))
 
-#define ATXN_PTRDECOUNT(ptr) ((void *) (((intptr_t) (ptr)) & ~ATXN_COUNTMASK))
+#define ATXN_PTRDECOUNT(ptr) ((void *) (((uintptr_t) (ptr)) & ~ATXN_COUNTMASK))
 
 /**
  * Transforms a pointer to a memory region to a pointer to the
@@ -125,15 +126,15 @@ struct atxn_item {
 #define ATXN_ITEM2PTR(item) (((void *) item) + offsetof(struct atxn_item, data))
 
 /* #define ATXN_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) } */
-static inline uint_fast16_t __atxn_urefs(struct atxn_item *item, int8_t txncount, int8_t refcount) {
+static inline uint_fast32_t __atxn_urefs(struct atxn_item *item, int16_t txncount, int16_t refcount) {
     union {
 	struct {
-	    int8_t txncount;
-	    int8_t refcount;
+	    int16_t txncount;
+	    int16_t refcount;
 	} s;
-	uint_fast16_t count;
+	uint_fast32_t count;
     } u;
-    uint_fast16_t o_count;
+    uint_fast32_t o_count;
     o_count = atomic_load(&item->header.refcount);
     do {
 	u.count = o_count;
@@ -168,6 +169,21 @@ static inline void *atxn_item_init(struct atxn_item *item, void (*destroy)(struc
 }
 
 /**
+ * Increments the reference count of a `struct atxn_item` pointer.
+ *
+ * This is intended for situations in which a single thread is passing
+ * a reference among different memory regions. Contention should not
+ * be an issue in this transfer.
+ *
+ * @param ptr the pointer whose reference count should be incremented.
+ */
+static inline void atxn_incref(void *ptr) {
+    if(ptr != NULL) {
+	__atxn_urefs(ATXN_PTR2ITEM(ptr), 0, 1);
+    }
+}
+
+/**
  * Initializes a transaction.
  *
  * @param txn a pointer to the transaction being initialized.
@@ -187,7 +203,7 @@ static inline void atxn_init(atxn_t *txn, void *ptr) {
  *
  * @param txn the transaction to destroy.
  */
-/* drops its reference to ptr */
+/* The transaction drops its reference to ptr */
 static inline void atxn_destroy(atxn_t *txn) {
     void *ptr;
     if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange(&txn->ptr, NULL)) != NULL) {
@@ -208,7 +224,26 @@ static inline void atxn_destroy(atxn_t *txn) {
  * transaction item.
  */
 static inline void *atxn_acquire(volatile atxn_t *txn) {
-    return ATXN_PTRDECOUNT(atomic_ptr_fetch_add(&txn->ptr, 1));
+    void *ptr = atomic_ptr_fetch_add(&txn->ptr, 1) + 1;
+    /* We have one reference */
+    void *ret = ATXN_PTRDECOUNT(ptr);
+    if(ret != NULL) {
+	__atxn_urefs(ATXN_PTR2ITEM(ret), 0, 1);
+    }
+    /* We have two references, try and remove the one from the pointer. */
+    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &ptr, ptr - 1,
+							      memory_order_seq_cst, memory_order_relaxed))) {
+	/* Is the pointer still valid? */
+	if(ATXN_PTRDECOUNT(ptr) != ret) {
+	    /* Somebody else has transferred / will transfer the
+	     * count. */
+	    if(ret != NULL) {
+		__atxn_urefs(ATXN_PTR2ITEM(ret), 0, -1);
+	    }
+	    break;
+	}
+    }
+    return ret;
 }
 
 /**
@@ -228,12 +263,9 @@ static inline bool atxn_check(volatile atxn_t *txn, void *ptr) {
 /**
  * Releases a reference to a `struct atxn_item` pointer.
  *
- * `atxn_release` is preferred if there is a corresponding
- * transaction, although both functions will always work correctly.
- *
  * @param ptr the pointer to release a reference to.
  */
-static inline void atxn_item_release(void *ptr) {
+static inline void atxn_release(void *ptr) {
     if(ptr != NULL) {
 	/* if count is not transferred before this call, count will go
 	 * negative instead of 0 and the transferer will be
@@ -243,30 +275,6 @@ static inline void atxn_item_release(void *ptr) {
 	    item->header.destroy(item);
 	}
     }
-}
-
-/**
- * Releases a reference to a `struct atxn_item` pointer.
- *
- * `atxn_release` is preferred if there is a corresponding
- * transaction, although both functions will always work correctly.
- *
- * @param txn the transaction from which a reference was acquired.
- * @param ptr the pointer to release a reference to.
- */
-static inline void atxn_release(volatile atxn_t *txn, void *ptr) {
-    /* Is the ptr still valid? then just decrement it, provided it's
-     * count is at least 1. */
-    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
-    while(ATXN_PTRDECOUNT(localptr) == ptr && ATXN_PTR2COUNT(localptr) != 0) {
-	if(likely(atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, localptr - 1,
-							    memory_order_seq_cst, memory_order_relaxed))) {
-	    /* Success! */
-	    return;
-	}
-    }
-    /* Nope.  Try next method. */
-    atxn_item_release(ptr);
 }
 
 /**

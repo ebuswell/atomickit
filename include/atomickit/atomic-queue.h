@@ -35,7 +35,7 @@
 /**
  * The size of the aqueue_node that is not the user data.
  */
-#define AQUEUE_NODE_OVERHEAD (sizeof(struct aqueue_node) - 1)
+#define AQUEUE_NODE_OVERHEAD (offsetof(struct aqueue_node, data))
 
 struct aqueue_node;
 
@@ -52,29 +52,29 @@ struct aqueue_node_header {
  *
  * Good code will not depend on the contents of this struct.
  */
-struct aqueue_node_ptr {
-    struct aqueue_node_header header;
-    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** user-defined data area */
-};
-
-/**
- * Queue node, low-level
- *
- * This is essentially a queue node in a `struct atxn_item` wrapper.
- */
 struct aqueue_node {
-    struct atxn_item_header header;
-    struct aqueue_node_ptr nodeptr __attribute__((aligned(ATXN_ALIGN)));
+    struct aqueue_node_header header;
+    struct atxn_item_header txitem_header __attribute__((aligned(ATXN_ALIGN))); /** atxn_item header */
+    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** user-defined data area */
 };
 
 /**
  * Get the node for the corresponding node data.
  */
-#define AQUEUE_PTR2NODEPTR(ptr) ((struct aqueue_node_ptr *) (((intptr_t) (ptr)) - (offsetof(struct aqueue_node_ptr, data))))
+#define AQUEUE_PTR2NODE(ptr) ((struct aqueue_node *) (((intptr_t) (ptr)) - (offsetof(struct aqueue_node, data))))
 /**
  * Get the node data for the corresponding node.
  */
-#define AQUEUE_NODEPTR2PTR(item) ((void *) (((intptr_t) (item)) + (offsetof(struct aqueue_node_ptr, data))))
+#define AQUEUE_NODE2PTR(item) ((void *) (((intptr_t) (item)) + (offsetof(struct aqueue_node, data))))
+/**
+ * Get the node for the corresponding atxn_item
+ */
+#define AQUEUE_TXITEM2NODE(item) ((struct aqueue_node *) (((intptr_t) (item)) - (offsetof(struct aqueue_node, txitem_header))))
+/**
+ * Get the atxn_item for the corresponding node
+ */
+#define AQUEUE_NODE2TXITEM(item) ((struct atxn_item *) (((intptr_t) (item)) + (offsetof(struct aqueue_node, txitem_header))))
+
 
 /**
  * Atomic Queue.
@@ -84,9 +84,10 @@ typedef struct {
     atxn_t tail;
 } aqueue_t;
 
-static void __aqueue_node_destroy(struct aqueue_node *node) {
-    atxn_destroy(&node->nodeptr.header.next);
-    node->nodeptr.header.destroy(node);
+static void __aqueue_txitem_destroy(struct atxn_item *item) {
+    struct aqueue_node *node = AQUEUE_TXITEM2NODE(item);
+    atxn_destroy(&node->header.next);
+    node->header.destroy(node);
 }
 
 /**
@@ -106,21 +107,18 @@ static void __aqueue_node_destroy(struct aqueue_node *node) {
  * node.
  */
 static inline void *aqueue_node_init(struct aqueue_node *node, void (*destroy)(struct aqueue_node *)) {
-    struct aqueue_node_ptr *node_ptr = atxn_item_init((struct atxn_item *) node,
-						      (void (*)(struct atxn_item *)) __aqueue_node_destroy);
-    node_ptr->header.destroy = destroy;
-    atxn_init(&node_ptr->header.next, NULL);
-    return AQUEUE_NODEPTR2PTR(node_ptr);
+    node->header.destroy = destroy;
+    atxn_init(&node->header.next, NULL);
+    return atxn_item_init(AQUEUE_NODE2TXITEM(node), __aqueue_txitem_destroy);
 }
 
 /**
- * Releases a reference to a queue node.
+ * Releases a reference to a queue node. Convenience wrapper for
+ * `atxn_release`.
  *
  * @param item the pointer to release a reference to.
  */
-static inline void aqueue_node_release(void *item) {
-    atxn_item_release(AQUEUE_PTR2NODEPTR(item));
-}
+#define aqueue_node_release(item) atxn_release(item);
 
 /**
  * Initializes a queue.
@@ -131,8 +129,8 @@ static inline void aqueue_node_release(void *item) {
  * a sentinel and will not be returned.
  */
 static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
-    atxn_init(&aqueue->head, AQUEUE_PTR2NODEPTR(sentinel));
-    atxn_init(&aqueue->tail, AQUEUE_PTR2NODEPTR(sentinel));
+    atxn_init(&aqueue->head, sentinel);
+    atxn_init(&aqueue->tail, sentinel);
 }
 
 /**
@@ -144,26 +142,28 @@ static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
  * item to enqueue.
  */
 static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
-    struct aqueue_node_ptr *nodeptr = AQUEUE_PTR2NODEPTR(item);
-    struct aqueue_node_ptr *dummy = atxn_acquire(&nodeptr->header.next);
-    atxn_commit(&nodeptr->header.next, dummy, NULL);
-    atxn_release(&nodeptr->header.next, dummy);
+    struct aqueue_node *node = AQUEUE_PTR2NODE(item);
+    void *dummy = atxn_acquire(&node->header.next);
+    atxn_commit(&node->header.next, dummy, NULL);
+    atxn_release(dummy);
 
-    struct aqueue_node_ptr *tail;
-    struct aqueue_node_ptr *next;
+    void *tailptr;
+    void *nextptr;
+    struct aqueue_node *tail;
     for(;;) {
-	tail = atxn_acquire(&aqueue->tail);
-	next = atxn_acquire(&tail->header.next);
-	if(unlikely(next != NULL)) {
-	    atxn_commit(&aqueue->tail, tail, next);
-	} else if(likely(atxn_commit(&tail->header.next, next, nodeptr))) {
-	    atxn_commit(&aqueue->tail, tail, nodeptr);
-	    atxn_item_release(next);
-	    atxn_item_release(tail);
+	tailptr = atxn_acquire(&aqueue->tail);
+	tail = AQUEUE_PTR2NODE(tailptr);
+	nextptr = atxn_acquire(&tail->header.next);
+	if(unlikely(nextptr != NULL)) {
+	    atxn_commit(&aqueue->tail, tailptr, nextptr);
+	} else if(likely(atxn_commit(&tail->header.next, nextptr, item))) {
+	    atxn_commit(&aqueue->tail, tailptr, item);
+	    atxn_release(nextptr);
+	    atxn_release(tailptr);
 	    return;
 	}
-	atxn_release(&tail->header.next, next);
-	atxn_release(&aqueue->tail, tail);
+	atxn_release(nextptr);
+	atxn_release(tailptr);
     }
 }
 
@@ -177,23 +177,23 @@ static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
  * dequeued item.
  */
 static inline void *aqueue_deq(aqueue_t *aqueue) {
-    struct aqueue_node_ptr *head;
-    struct aqueue_node_ptr *next;
+    void *headptr;
+    void *nextptr;
     for(;;) {
-	head = atxn_acquire(&aqueue->head);
-	next = atxn_acquire(&head->header.next);
-	if(next == NULL) {
-	    atxn_release(&head->header.next, next);
-	    atxn_release(&aqueue->head, head);
+	headptr = atxn_acquire(&aqueue->head);
+	nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
+	if(nextptr == NULL) {
+	    atxn_release(nextptr);
+	    atxn_release(headptr);
 	    return NULL;
 	}
-	if(likely(atxn_commit(&aqueue->head, head, next))) {
+	if(likely(atxn_commit(&aqueue->head, headptr, nextptr))) {
 	    /* DON'T release next */
-	    atxn_item_release(head);
-	    return AQUEUE_NODEPTR2PTR(next);
+	    atxn_release(headptr);
+	    return nextptr;
 	}
-	atxn_release(&head->header.next, next);
-	atxn_release(&aqueue->head, head);
+	atxn_release(nextptr);
+	atxn_release(headptr);
     }
 }
 
