@@ -180,8 +180,15 @@ static inline void *fstack_pop(int bin) {
     for(;;) {
 	/* Acquire the top of the stack and update its reference
 	 * count. */
-	void *next = atomic_ptr_fetch_add_explicit(&glbl_fstack[bin], 1,
-						   memory_order_acq_rel) + 1;
+	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+	do {
+	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
+		/* Spinlock if too many threads are accessing this at once. */
+		atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+	    }
+	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
+								    memory_order_acq_rel, memory_order_acquire)));
+	next += 1;
 	if(PTR_DECOUNT(next) == NULL) {
 	    /* The stack is currently empty; get rid of the reference
 	     * count we just added to the NULL pointer. */
@@ -233,8 +240,15 @@ static void fstack_push(int bin, void *ptr) {
 	/* Get the top of the stack; we have to update reference count
 	 * since we act like pop if there's more than our own
 	 * reference count. */
-	void *next = atomic_ptr_fetch_add_explicit(&glbl_fstack[bin], 1,
-						   memory_order_acq_rel) + 1;
+	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+	do {
+	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
+		/* Spinlock if too many threads are accessing this at once. */
+		atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+	    }
+	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
+								    memory_order_acq_rel, memory_order_acquire)));
+	next += 1;
 	if(PTR_DECOUNT(next) == NULL) {
 	    /* This is the only item that will be on the stack. */
 	    new_item->next = NULL;

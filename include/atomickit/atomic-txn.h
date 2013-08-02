@@ -254,7 +254,15 @@ static inline void atxn_destroy(atxn_t *txn) {
  * transaction item.
  */
 static inline void *atxn_acquire(atxn_t *txn) {
-    void *ptr = atomic_ptr_fetch_add_explicit(&txn->ptr, 1, memory_order_acq_rel) + 1;
+    void *ptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
+    do {
+	while(ATXN_PTR2COUNT(ptr) == ATXN_ALIGN - 1) {
+	    /* Spinlock if too many threads are accessing this at once. */
+	    ptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
+	}
+    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &ptr, ptr + 1,
+								memory_order_acq_rel, memory_order_acquire)));
+    ptr += 1;
     /* We have one reference */
     void *ret = ATXN_PTRDECOUNT(ptr);
     if(ret != NULL) {

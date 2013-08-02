@@ -22,7 +22,7 @@ static inline struct amtxn_stub *create_stub(void *prev, void *ptr) {
     }
     struct amtxn_stub *stub = atxn_item_init(item, __amtxn_destroy_stub);
     atxn_init(&stub->prev, prev);
-    atxn_init(&stub->value, Ptr);
+    atxn_init(&stub->value, ptr);
     atomic_store_explicit(&stub->clock, 0, memory_order_release);
     return stub;
 }
@@ -121,10 +121,9 @@ amtxn_handle_t *amtxn_start() {
     (retidx) = 0;					\
     size_t __l = 0;					\
     size_t __u = (nitems);				\
-    typeof(list) __list = (list);			\
     while(__l < __u) {					\
         (retidx) = (__l + __u) / 2;			\
-	amtxn_t *__location = __list[retidx].location;	\
+	amtxn_t *__location = (list)[retidx].location;	\
 	if((value) < __location) {			\
 	    __u = (retidx);				\
 	} else if((value) > __location) {		\
@@ -157,11 +156,13 @@ void *amtxn_acquire(amtxn_handle_t *handle, amtxn_t *txn) {
     /* First see if we already have this */
     size_t i;
     /* Check update list */
-    IF_BSEARCH(handle->update_list, handle->nupdates, txn, i) {
+    struct amtxn_update *update_list = handle->update_list;
+    IF_BSEARCH(update_list, handle->nupdates, txn, i) {
 	return atxn_peek(&update_list[i].stub->value);
     } ENDIF_BSEARCH;
     /* Check check list */
-    IF_BSEARCH(handle->check_list, handle->nchecks, txn, i) {
+    struct amtxn_check *check_list = handle->check_list;
+    IF_BSEARCH(check_list, handle->nchecks, txn, i) {
 	return check_list[i].value;
     } ENDIF_BSEARCH;
     /* Couldn't find it. The above code has the side effect of finding
@@ -170,7 +171,6 @@ void *amtxn_acquire(amtxn_handle_t *handle, amtxn_t *txn) {
     /* Fetch the value */
     void *ret = amtxn_acquire1(txn);
     /* Now check that no previous values have changed */
-    struct amtxn_check *check_list = handle->check_list;
     size_t nchecks = handle->nchecks;
     size_t j;
     for(j = 0; j < nchecks; j++) {
