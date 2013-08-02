@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <unistd.h>
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -94,15 +96,52 @@ static inline void *randomptr() {
     }
 }
 
+#define am_perror(msg) do {						\
+	char buf[128];							\
+	const char *msgstart = msg ": ";				\
+	strcpy(buf, msgstart);						\
+	if(strerror_r(errno, buf + strlen(msgstart), 128 - strlen(msgstart)) == 0) { \
+	    strcpy(buf + strlen(buf), "\n");				\
+	    write(STDERR_FILENO, buf, strlen(buf));			\
+	} else {							\
+	    const char *plainmsg = msg "\n";				\
+	    write(STDERR_FILENO, plainmsg, strlen(plainmsg));		\
+	}								\
+    } while(0)
+
+
 /* Allocate pages directly from the OS. Uses mmap. */
 static inline void *os_alloc(size_t size) {
-    return mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void *ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if(ptr == MAP_FAILED) {
+	return NULL;
+    } else {
+	return ptr;
+    }
 }
 
 /* Free pages directly to the OS. Uses munmap. Note that currently
  * fragmented pages are never freed. */
-static inline int os_free(void *ptr, size_t size) {
-    return munmap(ptr, PAGE_CEIL(size));
+static inline void os_free(void *ptr, size_t size) {
+    if(munmap(ptr, PAGE_CEIL(size)) != 0) {
+	am_perror("afree() failed at munmap; MEMORY IS LEAKING");
+    }
+}
+
+static inline bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsize, size_t newsize) {
+    size_t c_oldsize = PAGE_CEIL(oldsize);
+    size_t c_newsize = PAGE_CEIL(newsize);
+    if(c_oldsize == c_newsize) {
+	return true;
+    } else if(c_oldsize > c_newsize) {
+	ptr += c_newsize;
+	if(munmap(ptr, c_oldsize - c_newsize) != 0) {
+	    am_perror("atryrealloc() failed at munmap;");
+	    return false;
+	}
+	return true;
+    }
+    return false;
 }
 
 /* Reallocate a memory region directly with the OS. */
@@ -111,15 +150,25 @@ static inline void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
     size_t c_newsize = PAGE_CEIL(newsize);
     if(c_oldsize == c_newsize) {
 	return ptr;
+    } else if(c_oldsize > c_newsize) {
+	ptr += c_newsize;
+	int r = munmap(ptr, c_oldsize - c_newsize);
+	if(r != 0) {
+	    return NULL;
+	}
+	return ptr;
     }
-    void *ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);;
-    if(ret == NULL) {
+    /* Otherwise we're growing the region. */
+    void *ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    if(ret == MAP_FAILED) {
 	return NULL;
     }
-    memcpy(ret, ptr, oldsize > newsize ? newsize : oldsize);
+    memcpy(ret, ptr, oldsize);
     int r = munmap(ptr, c_oldsize);
     if(r != 0) {
-	munmap(ret, c_newsize);
+	if(munmap(ret, c_newsize) != 0) {
+	    am_perror("atryrealloc() failed in munmap error routine; MEMORY IS LEAKING");
+	}
 	return NULL;
     }
     return ret;
@@ -131,14 +180,15 @@ static inline void *fstack_pop(int bin) {
     for(;;) {
 	/* Acquire the top of the stack and update its reference
 	 * count. */
-	void *next = atomic_ptr_fetch_add(&glbl_fstack[bin], 1) + 1;
+	void *next = atomic_ptr_fetch_add_explicit(&glbl_fstack[bin], 1,
+						   memory_order_acq_rel) + 1;
 	if(PTR_DECOUNT(next) == NULL) {
 	    /* The stack is currently empty; get rid of the reference
 	     * count we just added to the NULL pointer. */
 	    do {
 		if(likely(atomic_ptr_compare_exchange_weak_explicit(
 			      &glbl_fstack[bin], &next, NULL,
-			      memory_order_seq_cst, memory_order_relaxed)
+			      memory_order_acq_rel, memory_order_relaxed)
 			  || next == NULL)) {
 		    /* Empty stack. */
 		    return NULL;
@@ -153,9 +203,10 @@ static inline void *fstack_pop(int bin) {
 	do {
 	    if(likely(atomic_ptr_compare_exchange_weak_explicit(
 			  &glbl_fstack[bin], &next, item->next,
-			  memory_order_seq_cst, memory_order_relaxed))) {
+			  memory_order_acq_rel, memory_order_relaxed))) {
 		/* Transfer count. */
-		atomic_fetch_add(&item->refcount, PTR_COUNT(next));
+		atomic_fetch_add_explicit(&item->refcount, PTR_COUNT(next),
+					  memory_order_acq_rel);
 		break;
 	    }
 	} while(PTR_DECOUNT(next) == item);
@@ -182,7 +233,8 @@ static void fstack_push(int bin, void *ptr) {
 	/* Get the top of the stack; we have to update reference count
 	 * since we act like pop if there's more than our own
 	 * reference count. */
-	void *next = atomic_ptr_fetch_add(&glbl_fstack[bin], 1) + 1;
+	void *next = atomic_ptr_fetch_add_explicit(&glbl_fstack[bin], 1,
+						   memory_order_acq_rel) + 1;
 	if(PTR_DECOUNT(next) == NULL) {
 	    /* This is the only item that will be on the stack. */
 	    new_item->next = NULL;
@@ -263,14 +315,25 @@ breakdown_chunk:
     return ret;
 }
 
-int afree(void *ptr, size_t size) {
+void afree(void *ptr, size_t size) {
     if(size == 0) {
-	return 0;
+	return;
     } else if(size > 2048) {
-	return os_free(ptr, size);
+	os_free(ptr, size);
     } else {
 	fstack_push(size2bin(size), ptr);
-	return 0;
+    }
+}
+
+bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
+    if(oldsize > 2048 && newsize > 2048) {
+	return os_tryrealloc(ptr, oldsize, newsize);
+    } else if(oldsize == 0 && newsize == 0) {
+	return true;
+    } else if(size2bin(oldsize) == size2bin(newsize)) {
+	return true;
+    } else {
+	return false;
     }
 }
 
@@ -281,10 +344,7 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 	}
 	return amalloc(newsize);
     } else if(newsize == 0) {
-	int r = afree(ptr, oldsize);
-	if(r != 0) {
-	    return NULL;
-	}
+	afree(ptr, oldsize);
 	return randomptr();
     }
     if(oldsize > 2048 && newsize > 2048) {
@@ -297,10 +357,6 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 	return NULL;
     }
     memcpy(ret, ptr, oldsize > newsize ? newsize : oldsize);
-    int r = afree(ptr, oldsize);
-    if(r != 0) {
-	afree(ret, newsize);
-	return NULL;
-    }
+    afree(ptr, oldsize);
     return ret;
 }

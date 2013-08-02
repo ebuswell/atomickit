@@ -220,6 +220,51 @@ static void test_aqueue_deq() {
     ASSERT(nope == NULL);
 }
 
+static void test_aqueue_deq_cond() {
+    CHECKPOINT();
+    aqueue_node_release(node2_ptr);
+    ASSERT(aqueue_deq_cond(&aqueue, node1_ptr));
+    ASSERT(!node1_destroyed);
+    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
+    ASSERT(sentinel_destroyed);
+    node2_ptr = aqueue_peek(&aqueue);
+    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
+    ASSERT(!node2_destroyed);
+    aqueue_node_release(node2_ptr);
+    ASSERT(!node2_destroyed);
+    ASSERT(!aqueue_deq_cond(&aqueue, node1_ptr));
+    ASSERT(!node1_destroyed);
+    ASSERT(!node2_destroyed);
+    node2_ptr = aqueue_peek(&aqueue);
+    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
+    ASSERT(!node2_destroyed);
+    aqueue_node_release(node2_ptr);
+    ASSERT(!aqueue_deq_cond(&aqueue, NULL));
+    node2_ptr = aqueue_deq(&aqueue);
+    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
+    ASSERT(!node2_destroyed);
+    ASSERT(aqueue_deq_cond(&aqueue, NULL));
+}
+
+static void test_aqueue_peek() {
+    aqueue_node_release(node1_ptr);
+    CHECKPOINT();
+    aqueue_node_release(node2_ptr);
+    CHECKPOINT();
+    node1_ptr = aqueue_peek(&aqueue);
+    ASSERT(!node1_destroyed);
+    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
+    ASSERT(!sentinel_destroyed);
+    void *node1_ptr2 = aqueue_peek(&aqueue);
+    ASSERT(!node1_destroyed);
+    ASSERT(strcmp(node1_ptr2, ptrtest.string1) == 0);
+    ASSERT(!sentinel_destroyed);
+    aqueue_node_release(node1_ptr2);
+    ASSERT(!node1_destroyed);
+    aqueue_node_release(node1_ptr);
+    ASSERT(!node1_destroyed);
+}
+
 int run_atomic_queue_h_test_suite() {
     int r;
     void (*aqueue_uninit_tests[])() = { test_aqueue_node_init, NULL };
@@ -247,10 +292,14 @@ int run_atomic_queue_h_test_suite() {
 
     void (*aqueue_full_tests[])() = { test_aqueue_destroy_full,
 				      test_aqueue_node_release_enq,
-				      test_aqueue_deq, NULL };
+				      test_aqueue_deq,
+				      test_aqueue_deq_cond,
+				      test_aqueue_peek, NULL };
     char *aqueue_full_test_names[] = { "aqueue_destroy_full",
 				       "aqueue_node_release_enq",
-				       "aqueue_deq", NULL };
+				       "aqueue_deq",
+				       "aqueue_deq_cond",
+				       "aqueue_peek", NULL };
     r = run_test_suite(test_aqueue_full_fixture, aqueue_full_test_names, aqueue_full_tests);
     if(r != 0) {
 	return r;

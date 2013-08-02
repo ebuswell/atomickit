@@ -30,6 +30,7 @@
 #ifndef ATOMICKIT_ATOMIC_QUEUE_H
 #define ATOMICKIT_ATOMIC_QUEUE_H 1
 
+#include <stdbool.h>
 #include <atomickit/atomic-txn.h>
 
 /**
@@ -39,13 +40,19 @@
 
 struct aqueue_node;
 
+void __aqueue_txitem_destroy(struct atxn_item *item);
+
 /**
  * Queue node header
  */
 struct aqueue_node_header {
     void (*destroy)(struct aqueue_node *); /** pointer to user provided destruction function */
     atxn_t next; /** the next item in the queue */
+    struct atxn_item_header txitem_header __attribute__((aligned(ATXN_ALIGN))); /** atxn_item header */
 };
+
+#define AQUEUE_NODE_HEADER_VAR_INIT(destroy, txncount, refcount) { destroy, ATXN_VAR_NULL_INIT, \
+	    ATXN_ITEM_HEADER_VAR_INIT(__aqueue_txitem_destroy, txncount, refcount) }
 
 /**
  * Queue node
@@ -54,9 +61,10 @@ struct aqueue_node_header {
  */
 struct aqueue_node {
     struct aqueue_node_header header;
-    struct atxn_item_header txitem_header __attribute__((aligned(ATXN_ALIGN))); /** atxn_item header */
     uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** user-defined data area */
 };
+
+#define AQUEUE_SENTINEL_HEADER_VAR_INIT(destroy) AQUEUE_NODE_HEADER_VAR_INIT(destroy, 2, 0)
 
 /**
  * Get the node for the corresponding node data.
@@ -69,11 +77,11 @@ struct aqueue_node {
 /**
  * Get the node for the corresponding atxn_item
  */
-#define AQUEUE_TXITEM2NODE(item) ((struct aqueue_node *) (((intptr_t) (item)) - (offsetof(struct aqueue_node, txitem_header))))
+#define AQUEUE_TXITEM2NODE(item) ((struct aqueue_node *) (((intptr_t) (item)) - (offsetof(struct aqueue_node_header, txitem_header))))
 /**
  * Get the atxn_item for the corresponding node
  */
-#define AQUEUE_NODE2TXITEM(item) ((struct atxn_item *) (((intptr_t) (item)) + (offsetof(struct aqueue_node, txitem_header))))
+#define AQUEUE_NODE2TXITEM(item) ((struct atxn_item *) (((intptr_t) (item)) + (offsetof(struct aqueue_node_header, txitem_header))))
 
 
 /**
@@ -84,11 +92,7 @@ typedef struct {
     atxn_t tail;
 } aqueue_t;
 
-static void __aqueue_txitem_destroy(struct atxn_item *item) {
-    struct aqueue_node *node = AQUEUE_TXITEM2NODE(item);
-    atxn_destroy(&node->header.next);
-    node->header.destroy(node);
-}
+#define AQUEUE_VAR_INIT(sentinel) { ATXN_VAR_INIT(AQUEUE_NODE2TXITEM(sentinel)), ATXN_VAR_INIT(AQUEUE_NODE2TXITEM(sentinel)) }
 
 /**
  * Initializes a queue node and returns a pointer to its coresponding
@@ -143,9 +147,7 @@ static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
  */
 static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
     struct aqueue_node *node = AQUEUE_PTR2NODE(item);
-    void *dummy = atxn_acquire(&node->header.next);
-    atxn_commit(&node->header.next, dummy, NULL);
-    atxn_release(dummy);
+    atxn_store(&node->header.next, NULL);
 
     void *tailptr;
     void *nextptr;
@@ -183,7 +185,6 @@ static inline void *aqueue_deq(aqueue_t *aqueue) {
 	headptr = atxn_acquire(&aqueue->head);
 	nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
 	if(nextptr == NULL) {
-	    atxn_release(nextptr);
 	    atxn_release(headptr);
 	    return NULL;
 	}
@@ -191,6 +192,60 @@ static inline void *aqueue_deq(aqueue_t *aqueue) {
 	    /* DON'T release next */
 	    atxn_release(headptr);
 	    return nextptr;
+	}
+	atxn_release(nextptr);
+	atxn_release(headptr);
+    }
+}
+
+/**
+ * Returns a pointer to the first item without dequeueing it.
+ *
+ * @param aqueue a pointer to the queue from which the first item is
+ * to be gotten.
+ *
+ * @returns a pointer to the memory region corresponding to the
+ * first item in the queue.
+ */
+static inline void *aqueue_peek(aqueue_t *aqueue) {
+    void *headptr = atxn_acquire(&aqueue->head);
+    void *nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
+    /* DON'T release next */
+    atxn_release(headptr);
+    return nextptr;
+}
+
+/**
+ * Dequeues the first node if it is a certain item.
+ *
+ * @param aqueue a pointer to the queue from which the item is being
+ * dequeued.
+ *
+ * @param item the item to dequeue.
+ *
+ * @returns true if the item was dequeued, false otherwise.
+ */
+static inline bool aqueue_deq_cond(aqueue_t *aqueue, void *item) {
+    void *headptr;
+    void *nextptr;
+    for(;;) {
+	headptr = atxn_acquire(&aqueue->head);
+	nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
+	if(nextptr != item) {
+	    atxn_release(headptr);
+	    atxn_release(nextptr);
+	    return false;
+	}
+	if(nextptr == NULL) {
+	    /* We only get here if the caller *wants* us to be
+	     * empty... */
+	    atxn_release(headptr);
+	    return true;
+	}
+	if(likely(atxn_commit(&aqueue->head, headptr, nextptr))) {
+	    atxn_release(headptr);
+	    atxn_release(nextptr);
+	    return true;
 	}
 	atxn_release(nextptr);
 	atxn_release(headptr);

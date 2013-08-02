@@ -63,9 +63,9 @@ typedef struct {
  * 1`.
  */
 #ifdef __LP64__
-# define ATXN_ALIGN 16
-#else
 # define ATXN_ALIGN 8
+#else
+# define ATXN_ALIGN 4
 #endif
 
 struct atxn_item;
@@ -125,24 +125,34 @@ struct atxn_item {
  */
 #define ATXN_ITEM2PTR(item) (((void *) item) + offsetof(struct atxn_item, data))
 
+#define ATXN_VAR_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) }
+
+#define ATXN_VAR_NULL_INIT { ATOMIC_PTR_VAR_INIT(NULL) }
+
+#define ATXN_ITEM_HEADER_VAR_INIT(destroy, txncount, refcount) { destroy, ATOMIC_VAR_INIT((txncount << 16) | refcount) }
+
 /* #define ATXN_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) } */
 static inline uint_fast32_t __atxn_urefs(struct atxn_item *item, int16_t txncount, int16_t refcount) {
-    union {
-	struct {
-	    int16_t txncount;
-	    int16_t refcount;
-	} s;
-	uint_fast32_t count;
-    } u;
     uint_fast32_t o_count;
-    o_count = atomic_load(&item->header.refcount);
+    uint_fast32_t count;
+    union {
+	volatile int16_t s;
+	volatile uint16_t u;
+    } otxncount;
+    union {
+	volatile int16_t s;
+	volatile uint16_t u;
+    } orefcount;
+    o_count = atomic_load_explicit(&item->header.refcount, memory_order_acquire);
     do {
-	u.count = o_count;
-	u.s.txncount += txncount;
-	u.s.refcount += refcount;
-    } while(unlikely(!atomic_compare_exchange_weak_explicit(&item->header.refcount, &o_count, u.count,
-							    memory_order_seq_cst, memory_order_relaxed)));
-    return u.count;
+	orefcount.u = o_count & 0xFFFF;
+	otxncount.u = o_count >> 16;
+	orefcount.s += refcount;
+	otxncount.s += txncount;
+	count = (otxncount.u << 16) | orefcount.u;
+    } while(unlikely(!atomic_compare_exchange_weak_explicit(&item->header.refcount, &o_count, count,
+							    memory_order_acq_rel, memory_order_acquire)));
+    return count;
 }
 
 /**
@@ -162,10 +172,27 @@ static inline uint_fast32_t __atxn_urefs(struct atxn_item *item, int16_t txncoun
  * item.
  */
 static inline void *atxn_item_init(struct atxn_item *item, void (*destroy)(struct atxn_item *)) {
-    atomic_store(&item->header.refcount, 0);
-    __atxn_urefs(item, 0, 1);
+    atomic_init(&item->header.refcount, 1);
     item->header.destroy = destroy;
     return ATXN_ITEM2PTR(item);
+}
+
+static inline int atxn_refcount(void *ptr) {
+    union {
+	volatile int16_t s;
+	volatile uint16_t u;
+    } refcount;
+    refcount.u = atomic_load_explicit(&ATXN_PTR2ITEM(ptr)->header.refcount, memory_order_acquire) & 0xFFFF;
+    return refcount.s;
+}
+
+static inline int atxn_txncount(void *ptr) {
+    union {
+	volatile int16_t s;
+	volatile uint16_t u;
+    } txncount;
+    txncount.u = atomic_load_explicit(&ATXN_PTR2ITEM(ptr)->header.refcount, memory_order_acquire) >> 16;
+    return txncount.s;
 }
 
 /**
@@ -194,8 +221,9 @@ static inline void atxn_incref(void *ptr) {
 static inline void atxn_init(atxn_t *txn, void *ptr) {
     if(ptr != NULL) {
 	__atxn_urefs(ATXN_PTR2ITEM(ptr), 1, 0);
+	atomic_thread_fence(memory_order_seq_cst);
     }
-    atomic_ptr_init(&txn->ptr, ptr);
+    atomic_ptr_store_explicit(&txn->ptr, ptr, memory_order_release);
 }
 
 /**
@@ -206,10 +234,12 @@ static inline void atxn_init(atxn_t *txn, void *ptr) {
 /* The transaction drops its reference to ptr */
 static inline void atxn_destroy(atxn_t *txn) {
     void *ptr;
-    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange(&txn->ptr, NULL)) != NULL) {
+    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange_explicit(&txn->ptr, NULL, memory_order_acq_rel)) != NULL) {
 	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
 	if(__atxn_urefs(item, -1, ATXN_PTR2COUNT(ptr)) == 0) {
-	    item->header.destroy(item);
+	    if(item->header.destroy != NULL) {
+		item->header.destroy(item);
+	    }
 	}
     }
 }
@@ -223,8 +253,8 @@ static inline void atxn_destroy(atxn_t *txn) {
  * @returns pointer to the memory region for the particular
  * transaction item.
  */
-static inline void *atxn_acquire(volatile atxn_t *txn) {
-    void *ptr = atomic_ptr_fetch_add(&txn->ptr, 1) + 1;
+static inline void *atxn_acquire(atxn_t *txn) {
+    void *ptr = atomic_ptr_fetch_add_explicit(&txn->ptr, 1, memory_order_acq_rel) + 1;
     /* We have one reference */
     void *ret = ATXN_PTRDECOUNT(ptr);
     if(ret != NULL) {
@@ -232,7 +262,7 @@ static inline void *atxn_acquire(volatile atxn_t *txn) {
     }
     /* We have two references, try and remove the one from the pointer. */
     while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &ptr, ptr - 1,
-							      memory_order_seq_cst, memory_order_relaxed))) {
+							      memory_order_acq_rel, memory_order_acquire))) {
 	/* Is the pointer still valid? */
 	if(ATXN_PTRDECOUNT(ptr) != ret) {
 	    /* Somebody else has transferred / will transfer the
@@ -247,6 +277,20 @@ static inline void *atxn_acquire(volatile atxn_t *txn) {
 }
 
 /**
+ * Peek at a transaction's contents without affecting the reference
+ * count.
+ *
+ * @param txn the transaction from which to look at the current
+ * contents.
+ *
+ * @returns pointer to the memory region for the particular
+ * transaction item.
+ */
+static inline void *atxn_peek(atxn_t *txn) {
+    return ATXN_PTRDECOUNT(atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire));
+}
+
+/**
  * Checks to see if the content of the transaction is equal to the
  * provided pointer during some moment of this call.
  *
@@ -256,8 +300,8 @@ static inline void *atxn_acquire(volatile atxn_t *txn) {
  *
  * @returns true if `ptr` is equal to the content, false otherwise.
  */
-static inline bool atxn_check(volatile atxn_t *txn, void *ptr) {
-    return ATXN_PTRDECOUNT(atomic_ptr_load(&txn->ptr)) == ptr;
+static inline bool atxn_check(atxn_t *txn, void *ptr) {
+    return ATXN_PTRDECOUNT(atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire)) == ptr;
 }
 
 /**
@@ -272,7 +316,9 @@ static inline void atxn_release(void *ptr) {
 	 * responsible for freeing the variable, if needed. */
 	struct atxn_item *item = ATXN_PTR2ITEM(ptr);
 	if(__atxn_urefs(item, 0, -1) == 0) {
-	    item->header.destroy(item);
+	    if(item->header.destroy != NULL) {
+		item->header.destroy(item);
+	    }
 	}
     }
 }
@@ -291,8 +337,8 @@ static inline void atxn_release(void *ptr) {
  *
  * @returns true if the commit was successful, false otherwise.
  */
-static inline bool atxn_commit(volatile atxn_t *txn, void *oldptr, void *newptr) {
-    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_relaxed);
+static inline bool atxn_commit(atxn_t *txn, void *oldptr, void *newptr) {
+    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
     if(newptr != NULL) {
 	__atxn_urefs(ATXN_PTR2ITEM(newptr), 1, 0);
     }
@@ -313,6 +359,34 @@ static inline bool atxn_commit(volatile atxn_t *txn, void *oldptr, void *newptr)
 	/* refcount can't reach 0 here as the caller should still own a reference to oldptr */
     }
     return true;
+}
+
+/**
+ * Store a new item as the content of the transaction.
+ *
+ * This is unconditional and should only be used in special
+ * circumstances. The caller's references are untouched, so call
+ * `atxn_item_release()` on newptr if you no longer intend to
+ * reference it.
+ *
+ * @param txn the transaction for which to commit the new content.
+ * @param newptr the new content of the transaction.
+ *
+ * @returns true if the commit was successful, false otherwise.
+ */
+static inline void atxn_store(atxn_t *txn, void *newptr) {
+    if(newptr != NULL) {
+	__atxn_urefs(ATXN_PTR2ITEM(newptr), 1, 0);
+    }
+    void *ptr;
+    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange_explicit(&txn->ptr, newptr, memory_order_seq_cst)) != NULL) {
+	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
+	if(__atxn_urefs(item, -1, ATXN_PTR2COUNT(ptr)) == 0) {
+	    if(item->header.destroy != NULL) {
+		item->header.destroy(item);
+	    }
+	}
+    }
 }
 
 #endif /* ! ATOMICKIT_ATOMIC_TXN_H */

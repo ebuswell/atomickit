@@ -135,7 +135,7 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
     int r;
     char *uerror;
     int myerrno = 0;
-    struct test_result *result = test_result_create(test_name, UNRESOLVED, NULL, NULL, NULL);
+    struct test_result *result = test_result_create(test_name, TEST_UNRESOLVED, NULL, NULL, NULL);
     if(result == NULL) {
 	return -1;
     }
@@ -157,7 +157,11 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	if(test_writer == NULL) {
 	    exit(EXIT_FAILURE);
 	}
-	fixture(test);
+	if(fixture != NULL) {
+	    fixture(test);
+	} else {
+	    test();
+	}
 	fprintf(test_writer, "PASS:\n");
 	fclose(test_writer); /* ignore errors */
 	exit(EXIT_SUCCESS);
@@ -209,7 +213,7 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	}
 	if(r == 0) {
 	    timeout = true;
-	    result->status = UNRESOLVED;
+	    result->status = TEST_UNRESOLVED;
 	    result->explanation = strdup("Timeout");
 	    if(result->explanation == NULL) {
 		uerror = "Could not strdup";
@@ -271,19 +275,19 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
 	} else {
 	    char *message = line;
 	    if(strncmp(message, "PASS:", strlen("PASS:")) == 0) {
-		result->status = PASS;
+		result->status = TEST_PASS;
 		message += strlen("PASS:");
 	    } else if(strncmp(message, "FAIL:", strlen("FAIL:")) == 0) {
-		result->status = FAIL;
+		result->status = TEST_FAIL;
 		message += strlen("FAIL:");
 	    } else if(strncmp(message, "UNRESOLVED:", strlen("UNRESOLVED:")) == 0) {
-		result->status = UNRESOLVED;
+		result->status = TEST_UNRESOLVED;
 		message += strlen("UNRESOLVED:");
 	    } else if(strncmp(message, "UNTESTED:", strlen("UNTESTED:")) == 0) {
-		result->status = UNTESTED;
+		result->status = TEST_UNTESTED;
 		message += strlen("UNTESTED:");
 	    } else if(strncmp(message, "UNSUPPORTED:", strlen("UNSUPPORTED:")) == 0) {
-		result->status = UNSUPPORTED;
+		result->status = TEST_UNSUPPORTED;
 		message += strlen("UNSUPPORTED:");
 	    } else {
 		uerror = "Failure to parse child message";
@@ -371,7 +375,7 @@ error:
 	    return -1;
 	}
     }
-    result->status = UNRESOLVED;
+    result->status = TEST_UNRESOLVED;
     r = test_results_push(result);
     if(r != 0) {
 	test_result_free(result);
@@ -384,7 +388,7 @@ int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)(
     int r;
     for(; *test_name != NULL; test_name++, test++) {
 	if(*test == NULL) {
-	    r = no_test(*test_name, UNTESTED, "No test defined");
+	    r = no_test(*test_name, TEST_UNTESTED, "No test defined");
 	} else {
 	    r = run_test(fixture, *test_name, *test);
 	}
@@ -393,7 +397,7 @@ int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)(
 	    if(explanation == NULL) {
 		return -1;
 	    }
-	    struct test_result *myresult = test_result_create(*test_name, UNRESOLVED, explanation, NULL, NULL);
+	    struct test_result *myresult = test_result_create(*test_name, TEST_UNRESOLVED, explanation, NULL, NULL);
 	    if(myresult == NULL) {
 		free(explanation);
 		return -1;
@@ -418,22 +422,22 @@ int print_test_results() {
 	for(i = 0; i < nresults; i++) {
 	    char *status;
 	    switch(test_results->results[i]->status) {
-	    case PASS:
+	    case TEST_PASS:
 		passed++;
 		continue;
-	    case FAIL:
+	    case TEST_FAIL:
 		failed++;
 		status = "FAIL";
 		break;
-	    case UNTESTED:
+	    case TEST_UNTESTED:
 		untested++;
 		status = "UNTESTED";
 		break;
-	    case UNSUPPORTED:
+	    case TEST_UNSUPPORTED:
 		unsupported++;
 		status = "UNSUPPORTED";
 		break;
-	    case UNRESOLVED:
+	    case TEST_UNRESOLVED:
 	    default:
 		status = "UNRESOLVED";
 		unresolved++;
@@ -479,12 +483,12 @@ bool tests_succeeded() {
    size_t i;
    for(i = 0; i < test_results->nresults; i++) {
        switch(test_results->results[i]->status) {
-       case PASS:
-       case UNTESTED:
-       case UNSUPPORTED:
+       case TEST_PASS:
+       case TEST_UNTESTED:
+       case TEST_UNSUPPORTED:
 	   break;
-       case FAIL:
-       case UNRESOLVED:
+       case TEST_FAIL:
+       case TEST_UNRESOLVED:
        default:
 	   return false;
        }

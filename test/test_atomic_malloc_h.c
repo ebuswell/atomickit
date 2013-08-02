@@ -27,10 +27,6 @@
 void *regions[NSIZES + 1];
 
 /*************************/
-static void test_void_fixture(void (*test)()) {
-    test();
-}
-
 static void test_amalloc() {
     int i;
     CHECKPOINT();
@@ -77,8 +73,8 @@ static void test_mallocd_fixture(void (*test)()) {
 static void test_afree() {
     int i;
     for(i = 0; i < NSIZES; i++) {
-	int r = afree(regions[i], 12 * (2 << i));
-	ASSERT(r == 0);
+	CHECKPOINT();
+	afree(regions[i], 12 * (2 << i));
     }
 }
 
@@ -96,18 +92,28 @@ static void test_arealloc() {
     }
 }
 
+static void test_atryrealloc() {
+    int i;
+    for(i = 0; i < NSIZES; i++) {
+	ASSERT(atryrealloc(regions[i], 12 * (2 << i), 12 * (2 << i) + 4));
+    }
+    for(i = 0; i < NSIZES; i++) {
+	ASSERT(!atryrealloc(regions[i], 12 * (2 << i) + 4, 12 * (2 << (i + 1)) + 4));
+    }
+}
+
 /*************************/
 int run_atomic_malloc_h_test_suite() {
     int r;
     void (*void_tests[])() = { test_amalloc, NULL };
     char *void_test_names[] = { "amalloc", NULL };
-    r = run_test_suite(test_void_fixture, void_test_names, void_tests);
+    r = run_test_suite(NULL, void_test_names, void_tests);
     if(r != 0) {
 	return r;
     }
 
-    void (*mallocd_tests[])() = { test_afree, test_arealloc, NULL };
-    char *mallocd_test_names[] = { "afree", "arealloc", NULL };
+    void (*mallocd_tests[])() = { test_afree, test_arealloc, test_atryrealloc, NULL };
+    char *mallocd_test_names[] = { "afree", "arealloc", "atryrealloc", NULL };
     r = run_test_suite(test_mallocd_fixture, mallocd_test_names, mallocd_tests);
     if(r != 0) {
 	return r;

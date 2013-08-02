@@ -42,6 +42,7 @@
 #endif /* ! ATOMICKIT_ATOMIC_MALLOC_H */
 
 #include <sys/types.h>
+#include <stdbool.h>
 
 /**
  * Allocate and return a region of memory of the specified size.
@@ -58,12 +59,8 @@ void *amalloc(size_t size);
  *
  * @param ptr a pointer to the memory region to be freed.
  * @param size the size of the memory region.
- *
- * @returns zero on success, nonzero on error. It's probably unwise to
- * depend on this, but currently this function can only fail if the
- * size of the memory region is larger than 2048 bytes.
  */
-int afree(void *ptr, size_t size);
+void afree(void *ptr, size_t size);
 
 /**
  * Resize a region previously allocated with `amalloc()`.
@@ -78,3 +75,5 @@ int afree(void *ptr, size_t size);
  * was defined previously is undefined.
  */
 void *arealloc(void *ptr, size_t oldsize, size_t newsize);
+
+bool atryrealloc(void *ptr, size_t oldsize, size_t newsize);

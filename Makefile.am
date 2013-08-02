@@ -21,19 +21,19 @@ EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign serial-tests
 
 lib_LTLIBRARIES = libatomickit.la
-libatomickit_la_SOURCES = src/malloc.c
+libatomickit_la_SOURCES = src/queue.c src/malloc.c src/mtxn.c
 libatomickit_la_LDFLAGS = $(LDFLAGS) -L$(libdir) -export-dynamic -version_info @VERSION_INFO@
 libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
-libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-txn.h
+libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-txn.h include/atomickit/atomic-queue.h include/atomickit/atomic-malloc.h include/atomickit/atomic-mtxn.h
 libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = unittest
-unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_txn_h.c test/test_atomic_queue_h.c test/test_atomic_malloc_h.c
+unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_txn_h.c test/test_atomic_queue_h.c test/test_atomic_malloc_h.c test/test_atomic_mtxn_h.c
 unittest_LDADD = -latomickit
 unittest_LDFLAGS = $(LD_FLAGS) -rpath $(libdir)
 unittest_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@

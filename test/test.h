@@ -38,7 +38,7 @@
  * `UNSUPPORTED` - the test is not supported on this system
  * configuraiton.
  */
-enum test_status { PASS, FAIL, UNRESOLVED, UNTESTED, UNSUPPORTED };
+enum test_status { TEST_PASS, TEST_FAIL, TEST_UNRESOLVED, TEST_UNTESTED, TEST_UNSUPPORTED };
 
 /**
  * The result of a given test.
