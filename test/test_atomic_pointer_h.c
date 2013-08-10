@@ -28,10 +28,6 @@ static struct {
 
 static volatile atomic_ptr aptr = ATOMIC_PTR_VAR_INIT(NULL);
 
-static void test_atomic_ptr_blank_fixture(void (*test)()) {
-    test();
-}
-
 static void test_atomic_ptr_init() {
     CHECKPOINT();
     atomic_ptr_init(&aptr, ptrtest.string1);
@@ -182,7 +178,7 @@ int run_atomic_pointer_h_test_suite() {
     void (*atomic_ptr_blank_tests[])() = { test_atomic_ptr_init, test_atomic_ptr_is_lock_free, NULL };
     char *atomic_ptr_blank_test_names[] = { "atomic_ptr_init", "atomic_ptr_is_lock_free", NULL };
 
-    r = run_test_suite(test_atomic_ptr_blank_fixture, atomic_ptr_blank_test_names, atomic_ptr_blank_tests);
+    r = run_test_suite(NULL, atomic_ptr_blank_test_names, atomic_ptr_blank_tests);
     if(r != 0) {
 	return r;
     }

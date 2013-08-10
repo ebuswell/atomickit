@@ -29,13 +29,13 @@
 /**
  * The resulting status of a given test.
  *
- * `PASS` - the test passed.
- * `FAIL` - the test failed.
- * `UNRESOLVED` - the status of the test could not be determined,
+ * `TEST_PASS` - the test passed.
+ * `TEST_FAIL` - the test failed.
+ * `TEST_UNRESOLVED` - the status of the test could not be determined,
  * usually because of an unexpected error somewhere.
- * `UNTESTED` - the test was not run for some reason, usually because
- * the test has not yet been written.
- * `UNSUPPORTED` - the test is not supported on this system
+ * `TEST_UNTESTED` - the test was not run for some reason, usually
+ * because the test has not yet been written.
+ * `TEST_UNSUPPORTED` - the test is not supported on this system
  * configuraiton.
  */
 enum test_status { TEST_PASS, TEST_FAIL, TEST_UNRESOLVED, TEST_UNTESTED, TEST_UNSUPPORTED };
@@ -46,9 +46,12 @@ enum test_status { TEST_PASS, TEST_FAIL, TEST_UNRESOLVED, TEST_UNTESTED, TEST_UN
 struct test_result {
     char *test_name; /** The name of the test */
     enum test_status status; /** The resulting status of the test */
-    char *explanation; /** An explanation for the test's status */
-    char *file; /** The file in which the test failed, NULL on success */
-    char *line; /** The line in which the test failed, NULL on success */
+    char *explanation; /** An explanation for the test's status, can
+			* be empty but not NULL */
+    char *file; /** The file in which the test failed, ignored on
+		 * success */
+    int line; /** The line in which the test failed, ignored on
+	       * success */
 };
 
 /**
@@ -66,12 +69,6 @@ struct test_result_list {
 extern struct test_result_list *test_results;
 
 /**
- * The `FILE *` for communicating between the test and the test
- * framework.
- */
-extern FILE *test_writer;
-
-/**
  * Add a result to the test_results list.
  *
  * Should only be used by the test framework unless you know what you
@@ -86,7 +83,7 @@ int test_results_push(struct test_result *result);
 /**
  * Create a test result from the associated data.
  */
-struct test_result *test_result_create(char *test_name, enum test_status result, char *explanation, char *file, char *line);
+struct test_result *test_result_create(char *test_name, enum test_status result, char *explanation, char *file, int line);
 
 /**
  * Free a previously allocated test result and all associated strings.
@@ -113,7 +110,7 @@ int no_test(char *test_name, enum test_status result, char *explanation);
  *
  * @returns zero on success, nonzero on failure.
  */
-int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)());
+extern int (*run_test)(void (*fixture)(void (*)()), char *test_name, void (*test)());
 
 /**
  * Run a test suite and record the results.
@@ -127,12 +124,14 @@ int run_test(void (*fixture)(void (*)()), char *test_name, void (*test)());
  * @returns zero on success, nonzero on failure.
  */
 int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)());
+
 /**
  * Print a summary of the test results to the standard output.
  *
  * @returns zero on success, nonzero on failure.
  */
 int print_test_results();
+
 /**
  * Determine whether all the tests have succeeded or not.
  *
@@ -141,98 +140,76 @@ int print_test_results();
 bool tests_succeeded();
 
 /**
+ * Set the test framework to run the tests in the calling thread.
+ */
+void test_config_nofork();
+
+/**
+ * Checkpoint the test in case of unexpected error.
+ *
+ * Unless you know what you're doing, use the macro version instead.
+ */
+extern void (*checkpoint_test)(char *file, int line);
+
+/**
+ * End the test with the given status and explanation.
+ *
+ * Unless you know what you're doing, use the macro versions instead.
+ */
+extern void (*end_test)(enum test_status status, char *explanation);
+
+/**
  * Checkpoint the test in case of unexpected error (e.g. SEGFAULT),
  * recording the current file and line number.
  */
-#define CHECKPOINT()							\
-    do {								\
-	if((fprintf(test_writer, "CHECKPOINT:%s:%d\n", __FILE__, __LINE__) < 0) \
-	   || (fflush(test_writer) != 0)) {				\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-    } while(0)								\
+#define CHECKPOINT() do {						\
+	checkpoint_test(__FILE__, __LINE__);				\
+    } while(0)
 
 /**
  * Assert that some expression is true, failing the test otherwise.
  */
-#define ASSERT(assertion)						\
-    do {								\
+#define ASSERT(assertion) do {						\
 	CHECKPOINT();							\
 	if(!(assertion)) {						\
-	    if(fprintf(test_writer, "FAIL:Assertion failed: %s\n", #assertion) < 0) { \
-		fclose(test_writer);					\
-		exit(EXIT_FAILURE);					\
+	    char __buf[256];						\
+	    if(snprintf(__buf, 256, "Assertion failed: %s", #assertion) >= 256) { \
+		end_test(TEST_UNRESOLVED, "Buffer overflow: assertion too long"); \
 	    }								\
-	    if(fclose(test_writer) != 0) {				\
-		exit(EXIT_FAILURE);					\
-	    }								\
-	    exit(EXIT_SUCCESS);						\
+	    end_test(TEST_FAIL, __buf);					\
 	}								\
     } while(0)
 
 /**
  * Unconditionally fail the test.
  */
-#define FAIL(reason)							\
-    do {								\
+#define FAIL(reason) do {						\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "FAIL:%s\n", (reason)) < 0) {		\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	if(fclose(test_writer) != 0) {					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	exit(EXIT_SUCCESS);						\
+	end_test(TEST_FAIL, reason);					\
     } while(0)
 
 /**
  * Unconditionally abort the test, setting the status to UNRESOLVED.
  */
-#define UNRESOLVED(reason)						\
-    do {								\
+#define UNRESOLVED(reason) do {						\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNRESOLVED:%s\n", (reason)) < 0) {	\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	if(fclose(test_writer) != 0) {					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	exit(EXIT_SUCCESS);						\
+	end_test(TEST_UNRESOLVED, reason);				\
     } while(0)
 
 /**
  * Unconditionally abort the test, setting the status to UNTESTED.
  */
-#define UNTESTED(reason)						\
-    do {								\
+#define UNTESTED(reason) do {						\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNTESTED:%s\n", (reason)) < 0) {	\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	if(fclose(test_writer) != 0) {					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	exit(EXIT_SUCCESS);						\
+	end_test(TEST_UNTESTED, reason);				\
     } while(0)
 
 /**
  * Unconditionally abort the test, setting the status to UNSUPPORTED.
  */
-#define UNSUPPORTED(reason)						\
-    do {								\
+#define UNSUPPORTED(reason) do {					\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "UNSUPPORTED:%s\n", (reason)) < 0) {	\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	if(fclose(test_writer) != 0) {					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	exit(EXIT_SUCCESS);						\
+	end_test(TEST_UNSUPPORTED, reason);				\
     } while(0)
 
 /**
@@ -245,14 +222,7 @@ bool tests_succeeded();
 #define PASS(reason)							\
     do {								\
 	CHECKPOINT();							\
-	if(fprintf(test_writer, "PASS:%s\n", (reason)) < 0) {	\
-	    fclose(test_writer);					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	if(fclose(test_writer) != 0) {					\
-	    exit(EXIT_FAILURE);						\
-	}								\
-	exit(EXIT_SUCCESS);						\
+	end_test(TEST_PASS, reason);					\
     } while(0)
 
 #endif /* ! TEST_H */

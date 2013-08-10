@@ -34,6 +34,7 @@
 void *alloca(size_t);
 #endif
 
+#include <atomickit/atomic-rcp.h>
 #include <atomickit/atomic-queue.h>
 #include "test.h"
 
@@ -42,241 +43,174 @@ static struct {
     char __attribute__((aligned(8))) string2[14];
 } ptrtest = { "Test String 1", "Test String 2" };
 
-static bool sentinel_destroyed = false;
-static bool node1_destroyed = false;
-static bool node2_destroyed = false;
+static bool region1_destroyed;
+static bool region2_destroyed;
 
-static void destroy_node1(struct aqueue_node *node __attribute__((unused))) {
+static void destroy_region1(struct arcp_region *region __attribute__((unused))) {
     CHECKPOINT();
-    node1_destroyed = true;
+    region1_destroyed = true;
 }
 
-static void destroy_node2(struct aqueue_node *node __attribute__((unused))) {
+static void destroy_region2(struct arcp_region *region __attribute__((unused))) {
     CHECKPOINT();
-    node2_destroyed = true;
+    region2_destroyed = true;
 }
 
-static void destroy_sentinel(struct aqueue_node *node __attribute__((unused))) {
-    CHECKPOINT();
-    sentinel_destroyed = true;
-}
+static struct arcp_region *region1;
+static struct arcp_region *region2;
 
 static aqueue_t aqueue;
 
-static struct aqueue_node *node1;
-static struct aqueue_node *node2;
-static struct aqueue_node *sentinel;
-
-static void *node1_ptr;
-static void *node2_ptr;
-static void *sentinel_ptr;
-
-/*************************/
-static void test_aqueue_uninit_fixture(void (*test)()) {
-    node1 = alloca(AQUEUE_NODE_OVERHEAD + 14);
-    node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_node) - 1);
-    strcpy((char *) node1->data, ptrtest.string1);
-    strcpy((char *) node2->data, ptrtest.string2);
-    test();
-}
-
-static void test_aqueue_node_init() {
-    node1_ptr = aqueue_node_init(node1, destroy_node1);
-    ASSERT(node1->header.destroy == destroy_node1);
-    ASSERT(&node1->data == node1_ptr);
-    ASSERT(!node1_destroyed);
-}
-
 /****************************/
-static void test_aqueue_init_node_fixture(void (*test)()) {
-    node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_node) - 1);
-    strcpy((char *) node1->data, ptrtest.string1);
-    strcpy((char *) node2->data, ptrtest.string2);
-    
-    node1_ptr = aqueue_node_init(node1, destroy_node1);
-    node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
-    test();
-}
-
 static void test_aqueue_init() {
     CHECKPOINT();
-    aqueue_init(&aqueue, sentinel_ptr);
-    ASSERT(!sentinel_destroyed);
-    void *ptr1 = aqueue_deq(&aqueue);
-    ASSERT(ptr1 == NULL);
-    ASSERT(!sentinel_destroyed);
-}
-
-static void test_aqueue_node_release_unenq() {
-    CHECKPOINT();
-    aqueue_node_release(node1_ptr);
-    ASSERT(node1_destroyed);
+    int r = aqueue_init(&aqueue);
+    ASSERT(r == 0);
+    struct arcp_region *rg1 = aqueue_deq(&aqueue);
+    ASSERT(rg1 == NULL);
 }
 
 /****************************/
 
 static void test_aqueue_init_fixture(void (*test)()) {
-    node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_node) - 1);
-    strcpy((char *) node1->data, ptrtest.string1);
-    strcpy((char *) node2->data, ptrtest.string2);
-    node1_ptr = aqueue_node_init(node1, destroy_node1);
-    node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
-    aqueue_init(&aqueue, sentinel_ptr);
-    aqueue_node_release(sentinel_ptr);
+    region1_destroyed = false;
+    region2_destroyed = false;
+    region1 = alloca(ARCP_REGION_OVERHEAD + 14);
+    region2 = alloca(ARCP_REGION_OVERHEAD + 14);
+    strcpy((char *) region1->data, ptrtest.string1);
+    strcpy((char *) region2->data, ptrtest.string2);
+    arcp_region_init(region1, destroy_region1);
+    arcp_region_init(region2, destroy_region2);
+    int r = aqueue_init(&aqueue);
+    if(r != 0) {
+	UNRESOLVED("aqueue_init failed");
+    }
     test();
 }
-
 
 static void test_aqueue_destroy_empty() {
     CHECKPOINT();
     aqueue_destroy(&aqueue);
-    ASSERT(sentinel_destroyed);
 }
 
 static void test_aqueue_enq() {
     CHECKPOINT();
-    aqueue_enq(&aqueue, node1_ptr);
+    int r = aqueue_enq(&aqueue, region1);
+    ASSERT(r == 0);
+    r = aqueue_enq(&aqueue, region2);
+    ASSERT(r == 0);
+    arcp_release(region1);
     CHECKPOINT();
-    aqueue_enq(&aqueue, node2_ptr);
+    arcp_release(region2);
+    ASSERT(!region1_destroyed);
+    ASSERT(!region2_destroyed);
+    region1 = aqueue_deq(&aqueue);
     CHECKPOINT();
-    aqueue_node_release(node1_ptr);
+    region2 = aqueue_deq(&aqueue);
     CHECKPOINT();
-    aqueue_node_release(node2_ptr);
-    ASSERT(!node1_destroyed);
-    ASSERT(!node2_destroyed);
-    node1_ptr = aqueue_deq(&aqueue);
-    CHECKPOINT();
-    node2_ptr = aqueue_deq(&aqueue);
-    CHECKPOINT();
-    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
-    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
 }
 
 /****************************/
 
 static void test_aqueue_full_fixture(void (*test)()) {
-    node1 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    node2 = alloca(sizeof(struct aqueue_node) + 14 - 1);
-    sentinel = alloca(sizeof(struct aqueue_node) - 1);
-    strcpy((char *) node1->data, ptrtest.string1);
-    strcpy((char *) node2->data, ptrtest.string2);
-    node1_ptr = aqueue_node_init(node1, destroy_node1);
-    node2_ptr = aqueue_node_init(node2, destroy_node2);
-    sentinel_ptr = aqueue_node_init(sentinel, destroy_sentinel);
-    aqueue_init(&aqueue, sentinel_ptr);
-    aqueue_node_release(sentinel_ptr);
-    aqueue_enq(&aqueue, node1_ptr);
-    aqueue_enq(&aqueue, node2_ptr);
+    region1_destroyed = false;
+    region2_destroyed = false;
+    region1 = alloca(ARCP_REGION_OVERHEAD + 14);
+    region2 = alloca(ARCP_REGION_OVERHEAD + 14);
+    strcpy((char *) region1->data, ptrtest.string1);
+    strcpy((char *) region2->data, ptrtest.string2);
+    arcp_region_init(region1, destroy_region1);
+    arcp_region_init(region2, destroy_region2);
+    int r = aqueue_init(&aqueue);
+    if(r != 0) {
+	UNRESOLVED("aqueue_init failed");
+    }
+    r = aqueue_enq(&aqueue, region1);
+    if(r != 0) {
+	UNRESOLVED("aqueue_enq failed");
+    }
+    r = aqueue_enq(&aqueue, region2);
+    if(r != 0) {
+	UNRESOLVED("aqueue_enq failed");
+    }
     test();
 }
 
-static void test_aqueue_node_release_enq() {
-    aqueue_node_release(node1_ptr);
-    ASSERT(!node1_destroyed);
-    aqueue_node_release(node2_ptr);
-    ASSERT(!node2_destroyed);
-    node1_ptr = aqueue_deq(&aqueue);
-    CHECKPOINT();
-    node2_ptr = aqueue_deq(&aqueue);
-    CHECKPOINT();
-    aqueue_node_release(node1_ptr);
-    CHECKPOINT();
-    aqueue_node_release(node2_ptr);
-    ASSERT(node1_destroyed);
-    ASSERT(!node2_destroyed);
-    /* node2 has an implicit reference until the next dequeue */
-    /* ASSERT(node2_destroyed); */
-}
-
 static void test_aqueue_destroy_full() {
-    aqueue_node_release(node1_ptr);
+    CHECKPOINT();
+    arcp_release(region1);
     CHECKPOINT();
     aqueue_destroy(&aqueue);
-    ASSERT(sentinel_destroyed);
-    ASSERT(node1_destroyed);
-    ASSERT(!node2_destroyed);
+    ASSERT(region1_destroyed);
+    ASSERT(!region2_destroyed);
 }
 
 static void test_aqueue_deq() {
-    aqueue_node_release(node1_ptr);
+    arcp_release(region1);
     CHECKPOINT();
-    aqueue_node_release(node2_ptr);
+    arcp_release(region2);
     CHECKPOINT();
-    node1_ptr = aqueue_deq(&aqueue);
-    ASSERT(!node1_destroyed);
-    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
-    ASSERT(sentinel_destroyed);
-    node2_ptr = aqueue_deq(&aqueue);
-    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
-    ASSERT(!node2_destroyed);
+    region1 = aqueue_deq(&aqueue);
+    ASSERT(!region1_destroyed);
+    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    region2 = aqueue_deq(&aqueue);
+    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    ASSERT(!region2_destroyed);
     void *nope = aqueue_deq(&aqueue);
     ASSERT(nope == NULL);
 }
 
-static void test_aqueue_deq_cond() {
+static void test_aqueue_compare_deq() {
     CHECKPOINT();
-    aqueue_node_release(node2_ptr);
-    ASSERT(aqueue_deq_cond(&aqueue, node1_ptr));
-    ASSERT(!node1_destroyed);
-    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
-    ASSERT(sentinel_destroyed);
-    node2_ptr = aqueue_peek(&aqueue);
-    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
-    ASSERT(!node2_destroyed);
-    aqueue_node_release(node2_ptr);
-    ASSERT(!node2_destroyed);
-    ASSERT(!aqueue_deq_cond(&aqueue, node1_ptr));
-    ASSERT(!node1_destroyed);
-    ASSERT(!node2_destroyed);
-    node2_ptr = aqueue_peek(&aqueue);
-    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
-    ASSERT(!node2_destroyed);
-    aqueue_node_release(node2_ptr);
-    ASSERT(!aqueue_deq_cond(&aqueue, NULL));
-    node2_ptr = aqueue_deq(&aqueue);
-    ASSERT(strcmp(node2_ptr, ptrtest.string2) == 0);
-    ASSERT(!node2_destroyed);
-    ASSERT(aqueue_deq_cond(&aqueue, NULL));
+    arcp_release(region2);
+    ASSERT(aqueue_compare_deq(&aqueue, region1));
+    ASSERT(!region1_destroyed);
+    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    region2 = aqueue_peek(&aqueue);
+    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    arcp_release(region2);
+    ASSERT(!aqueue_compare_deq(&aqueue, region1));
+    ASSERT(!region1_destroyed);
+    ASSERT(!region2_destroyed);
+    region2 = aqueue_peek(&aqueue);
+    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    arcp_release(region2);
+    ASSERT(!region2_destroyed);
+    ASSERT(aqueue_compare_deq(&aqueue, region2));
+    ASSERT(region2_destroyed);
+    ASSERT(aqueue_peek(&aqueue) == NULL);
+    ASSERT(!aqueue_compare_deq(&aqueue, NULL));
 }
 
 static void test_aqueue_peek() {
-    aqueue_node_release(node1_ptr);
+    arcp_release(region1);
     CHECKPOINT();
-    aqueue_node_release(node2_ptr);
+    arcp_release(region2);
     CHECKPOINT();
-    node1_ptr = aqueue_peek(&aqueue);
-    ASSERT(!node1_destroyed);
-    ASSERT(strcmp(node1_ptr, ptrtest.string1) == 0);
-    ASSERT(!sentinel_destroyed);
-    void *node1_ptr2 = aqueue_peek(&aqueue);
-    ASSERT(!node1_destroyed);
-    ASSERT(strcmp(node1_ptr2, ptrtest.string1) == 0);
-    ASSERT(!sentinel_destroyed);
-    aqueue_node_release(node1_ptr2);
-    ASSERT(!node1_destroyed);
-    aqueue_node_release(node1_ptr);
-    ASSERT(!node1_destroyed);
+    region1 = aqueue_peek(&aqueue);
+    ASSERT(!region1_destroyed);
+    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    arcp_release(region1);
+    CHECKPOINT();
+    struct arcp_region *region1_2 = aqueue_peek(&aqueue);
+    ASSERT(!region1_destroyed);
+    ASSERT(strcmp((char *) region1_2->data, ptrtest.string1) == 0);
+    arcp_release(region1_2);
+    CHECKPOINT();
+    if(!aqueue_compare_deq(&aqueue, region1)) {
+	UNRESOLVED("aqueue_compare_deq failed");
+    }
+    CHECKPOINT();
+    ASSERT(region1_destroyed);
 }
 
 int run_atomic_queue_h_test_suite() {
     int r;
-    void (*aqueue_uninit_tests[])() = { test_aqueue_node_init, NULL };
-    char *aqueue_uninit_test_names[] = { "aqueue_node_init", NULL };
-    r = run_test_suite(test_aqueue_uninit_fixture, aqueue_uninit_test_names, aqueue_uninit_tests);
-    if(r != 0) {
-	return r;
-    }
-
-    void (*aqueue_init_node_tests[])() = { test_aqueue_init, test_aqueue_node_release_unenq, NULL };
-    char *aqueue_init_node_test_names[] = { "aqueue_init", "aqueue_node_release_unenq", NULL };
-    r = run_test_suite(test_aqueue_init_node_fixture, aqueue_init_node_test_names, aqueue_init_node_tests);
+    void (*void_tests[])() = { test_aqueue_init, NULL };
+    char *void_test_names[] = { "aqueue_init", NULL };
+    r = run_test_suite(NULL, void_test_names, void_tests);
     if(r != 0) {
 	return r;
     }
@@ -291,14 +225,12 @@ int run_atomic_queue_h_test_suite() {
     }
 
     void (*aqueue_full_tests[])() = { test_aqueue_destroy_full,
-				      test_aqueue_node_release_enq,
 				      test_aqueue_deq,
-				      test_aqueue_deq_cond,
+				      test_aqueue_compare_deq,
 				      test_aqueue_peek, NULL };
     char *aqueue_full_test_names[] = { "aqueue_destroy_full",
-				       "aqueue_node_release_enq",
 				       "aqueue_deq",
-				       "aqueue_deq_cond",
+				       "aqueue_compare_deq",
 				       "aqueue_peek", NULL };
     r = run_test_suite(test_aqueue_full_fixture, aqueue_full_test_names, aqueue_full_tests);
     if(r != 0) {

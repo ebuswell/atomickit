@@ -44,9 +44,7 @@
 struct fstack_item {
     void *next; /* Pointer to next item. This is set in one thread,
 		 * and only read in others after a load with a full
-		 * memory barrier. This should be fine in practice,
-		 * but the semantics of C11 atomics are a bit strange;
-		 * should this be an atomic_ptr? */
+		 * memory barrier, so it doesn't need to be atomic. */
     volatile atomic_int refcount; /* Reference count. */
 };
 
@@ -144,7 +142,7 @@ static inline bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsi
     return false;
 }
 
-/* Reallocate a memory region directly with the OS. */
+/* Reallocate a memory region directly from the OS. */
 static inline void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
     size_t c_oldsize = PAGE_CEIL(oldsize);
     size_t c_newsize = PAGE_CEIL(newsize);
@@ -184,7 +182,7 @@ static inline void *fstack_pop(int bin) {
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
-		atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
 	    }
 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
 								    memory_order_acq_rel, memory_order_acquire)));
@@ -244,7 +242,7 @@ static void fstack_push(int bin, void *ptr) {
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
-		atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
 	    }
 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
 								    memory_order_acq_rel, memory_order_acquire)));
@@ -255,7 +253,7 @@ static void fstack_push(int bin, void *ptr) {
 	    do {
 		if(likely(atomic_ptr_compare_exchange_weak_explicit(
 			      &glbl_fstack[bin], &next, ptr,
-			      memory_order_seq_cst, memory_order_relaxed))) {
+			      memory_order_seq_cst, memory_order_acquire))) {
 		    /* Success! */
 		    return;
 		}
@@ -269,7 +267,7 @@ static void fstack_push(int bin, void *ptr) {
 	    /* Try to push the item on to the top of the stack. */
 	    if(likely(atomic_ptr_compare_exchange_weak_explicit(
 			  &glbl_fstack[bin], &next, new_item,
-			  memory_order_seq_cst, memory_order_relaxed))) {
+			  memory_order_seq_cst, memory_order_acquire))) {
 		/* Success! */
 		return;
 	    }
@@ -280,7 +278,7 @@ static void fstack_push(int bin, void *ptr) {
 	while(PTR_DECOUNT(next) == item) {
 	    if(atomic_ptr_compare_exchange_weak_explicit(
 		   &glbl_fstack[bin], &next, item->next,
-		   memory_order_seq_cst, memory_order_relaxed)) {
+		   memory_order_acq_rel, memory_order_acquire)) {
 		/* Transfer count. */
 		atomic_fetch_add(&item->refcount, PTR_COUNT(next));
 		break;

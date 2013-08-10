@@ -41,10 +41,6 @@ static volatile atomic_intmax_t aintmax = ATOMIC_VAR_INIT(0);
 static volatile atomic_uintmax_t auintmax = ATOMIC_VAR_INIT(0);
 static volatile atomic_flag aflag = ATOMIC_FLAG_INIT;
 
-static void test_atomic_blank_fixture(void (*test)()) {
-    test();
-}
-
 static void test_atomic_init() {
     CHECKPOINT();
     atomic_init(&aint, 21);
@@ -278,7 +274,7 @@ int run_atomic_h_test_suite() {
 				       test_atomic_signal_fence, test_atomic_is_lock_free, NULL };
     char *atomic_blank_test_names[] = { "atomic_init", "atomic_thread_fence",
 					"atomic_signal_fence", "atomic_is_lock_free", NULL };
-    r = run_test_suite(test_atomic_blank_fixture, atomic_blank_test_names, atomic_blank_tests);
+    r = run_test_suite(NULL, atomic_blank_test_names, atomic_blank_tests);
     if(r != 0) {
 	return r;
     }

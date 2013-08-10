@@ -1,26 +1,4 @@
 /** @file atomic-txn.h
- * Atomic Transactions
- *
- * Atomic transactions are pointers with simple transactional
- * semantics for reference-counted memory regions.  Among other
- * things, they can be used to eliminate the so-called ABA problem.
- *
- * The memory allocation and deallocation functions are all user
- * defined.  In most cases, these will simply be `malloc` and `free`,
- * but note that these functions are themselves not, in most
- * implementations, lock free.  Thus, for more critically parallel
- * areas where the turnover time is fast, the programmer will want to
- * design her own version of these functions.  A simple implementation
- * is simply to use a null function for deallocation and a ring buffer
- * for allocation, provided one can be sure that the earliest
- * allocated item will always be deallocated before the buffer loops.
- * This is actually pretty typically the case.  Alternately, lock free
- * versions of malloc and free do exist, but they are complex and
- * often not suitable for general use at this time.
- *
- * References are *never* implicitly released.  The calling function
- * should *always* hold a reference to the item and release that
- * reference when it is no longer needed.
  */
 /*
  * Copyright 2013 Evan Buswell
@@ -42,359 +20,246 @@
 #ifndef ATOMICKIT_ATOMIC_TXN_H
 #define ATOMICKIT_ATOMIC_TXN_H 1
 
-#include <atomickit/atomic-pointer.h>
-#include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>
+#include <string.h>
+#include <atomickit/atomic.h>
+#include <atomickit/atomic-rcp.h>
+#include <atomickit/atomic-queue.h>
+#include <atomickit/atomic-malloc.h>
 
 /**
  * Atomic Transaction
  *
- * The container for the transactional item.
+ * A reference counted pointer that obeys transactional semantics.
+ * Holds items of type `struct arcp_region`, just as `arcp_t`.
+ * Although the two containers can be mixed, obviously transactional
+ * semantics obtain only to the extent that atxn_t containers are not
+ * mixed with arcp_t containers.
  */
 typedef struct {
-    volatile atomic_ptr/*<struct atxn_item>*/ ptr;
+    arcp_t/*<struct atxn_stub>*/ rcp;
 } atxn_t;
 
 /**
- * \def ATXN_ALIGN The alignment of the data portion of a transaction
- * item.  The maximum number of threads concurrently checking out a
- * given item from a given transaction will be equal to `ATXN_ALIGN -
- * 1`.
- */
-#ifdef __LP64__
-# define ATXN_ALIGN 8
-#else
-# define ATXN_ALIGN 4
-#endif
-
-struct atxn_item;
-
-/**
- * Atomic Transaction Item Header
+ * Atomic Transaction Stub
  *
- * The metadata needed for reference counting.
+ * A wrapper for the actual value. This is necessary to synchronize
+ * the shift of multiple transactional locations.
  */
-struct atxn_item_header {
-    void (*destroy)(struct atxn_item *); /** Pointer to a destruction function */
-    volatile atomic_uint_fast32_t refcount; /** High 16 bits, number
-					     * of transactions in
-					     * which this is
-					     * referenced; low 16
-					     * bits, the number of
-					     * individual references
-					     * to this item. */
+struct atxn_stub {
+    struct arcp_region_header header;
+    atomic_uint clock; /** The clock value at which this stub
+				 * was created. */
+    arcp_t prev; /** The previous value. */
+    arcp_t value; /** The current value. */
 };
 
 /**
- * Atomic Transaction Item
+ * Atomic Transaction Check
  *
- * The underlying data type which will be stored in the atomic
- * transaction.  In most cases, this will be automatically managed and
- * you will only be dealing with a pointer to the actual data region.
- * Good code will not depend on the content of this struct.
- *
- * An item may be stored in an arbitrary number of transactions.
+ * An individual equality test that we must make to commit the
+ * transaction.
  */
-struct atxn_item {
-    struct atxn_item_header header;
-    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** User-defined data. */
+struct atxn_check {
+    atxn_t *location; /** The location of the value to check. */
+    struct arcp_region *value; /** The value that location should be. */
 };
 
 /**
- * The size of the atxn_item that is not the user data.
+ * Atomic Transaction Update
+ *
+ * An individual update we will make when we commit the transaction.
  */
-#define ATXN_ITEM_OVERHEAD (offsetof(struct atxn_item, data))
-
-/* The mask for the transaction count. */
-#define ATXN_COUNTMASK ((intptr_t) (ATXN_ALIGN - 1))
-
-#define ATXN_PTRDECOUNT(ptr) ((void *) (((uintptr_t) (ptr)) & ~ATXN_COUNTMASK))
+struct atxn_update {
+    atxn_t *location; /** The location of the update. */
+    struct atxn_stub *stub; /** The new stub for the update. */
+};
 
 /**
- * Transforms a pointer to a memory region to a pointer to the
- * corresponding transaction item.
+ * Atomic Transaction Status.
+ * 
+ * The possible resulting statuses of the transaction.
  */
-#define ATXN_PTR2ITEM(ptr) ((struct atxn_item *) (((intptr_t) (ptr)) - offsetof(struct atxn_item, data)))
-/* Gets the count for a given pointer. */
-#define ATXN_PTR2COUNT(ptr) ((intptr_t) (ptr) & ATXN_COUNTMASK)
+enum atxn_status {
+    ATXN_PENDING = 0, /** The transaction has not yet finished being
+		    * processed. It may not have started processing
+		    * either. */
+    ATXN_FAILURE, /** The conditions of the transaction could not be
+		    * fulfilled due to one of the acquired things
+		    * having changed. */
+    ATXN_ERROR, /** There was an error processing the transaction. */
+    ATXN_SUCCESS /** The transaction was successfully committed. */
+};
 
 /**
- * Transforms a pointer to a transaction item to a pointer to the
- * corresponding memory region.
+ * Atomic Transaction Handle
+ *
+ * A handle for a given open transaction. Must not be referenced after
+ * the transaction is closed, either by aborting (`atxn_abort`) or by
+ * committing (`atxn_commit`).
  */
-#define ATXN_ITEM2PTR(item) (((void *) item) + offsetof(struct atxn_item, data))
-
-#define ATXN_VAR_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) }
-
-#define ATXN_VAR_NULL_INIT { ATOMIC_PTR_VAR_INIT(NULL) }
-
-#define ATXN_ITEM_HEADER_VAR_INIT(destroy, txncount, refcount) { destroy, ATOMIC_VAR_INIT((txncount << 16) | refcount) }
-
-/* #define ATXN_INIT(item) { ATOMIC_PTR_VAR_INIT(ATXN_ITEM2PTR(item)) } */
-static inline uint_fast32_t __atxn_urefs(struct atxn_item *item, int16_t txncount, int16_t refcount) {
-    uint_fast32_t o_count;
-    uint_fast32_t count;
-    union {
-	volatile int16_t s;
-	volatile uint16_t u;
-    } otxncount;
-    union {
-	volatile int16_t s;
-	volatile uint16_t u;
-    } orefcount;
-    o_count = atomic_load_explicit(&item->header.refcount, memory_order_acquire);
-    do {
-	orefcount.u = o_count & 0xFFFF;
-	otxncount.u = o_count >> 16;
-	orefcount.s += refcount;
-	otxncount.s += txncount;
-	count = (otxncount.u << 16) | orefcount.u;
-    } while(unlikely(!atomic_compare_exchange_weak_explicit(&item->header.refcount, &o_count, count,
-							    memory_order_acq_rel, memory_order_acquire)));
-    return count;
-}
+typedef struct {
+    struct arcp_region_header header;
+    volatile atomic_ulong procstatus; /** The processing status for this transaction. */
+    volatile atomic_uint clock; /** The clock value at which this
+				 * transaction is being processed. */
+    volatile atomic_int/*<enum atxn_status>*/ status; /** The final status
+						       * of this transaction. */
+    size_t nchecks; /** The number of checks for this transaction. */
+    size_t nupdates; /** The number of updates for this
+		      * transaction. */
+    size_t norphans; /** The number of orphaned updates for this
+		      * transaction. And orphaned update is kept to
+		      * secure the reference count until the
+		      * transaction is closed. */
+    struct atxn_check *check_list; /** The list of checks for this
+				     * transaction. */
+    struct atxn_update *update_list; /** The list of updates for this
+				       * transaction. */
+    void **orphan_list; /** The list of orphaned updates for this
+			 * transaction. And orphaned update is kept to
+			 * secure the reference count until the
+			 * transaction is closed. */
+} atxn_handle_t;
 
 /**
- * Initializes a transaction item and returns a pointer to its
- * coresponding memory region.
+ * Initialize a transaction container.
  *
- * The item has a single reference at this point, belonging to the
- * calling function.
- *
- * @param item a pointer to a transaction item.  This is typically
- * allocated with `malloc(ATXN_ITEM_OVERHEAD + <user data size>).
- * @param destroy pointer to a function that will destroy the
- * allocated item once it is no longer in use.  If no cleanup is
- * needed, this could just be `free`.
- *
- * @returns a pointer to the memory region that corresponds with the
- * item.
+ * @param txn a pointer to the transaction container being
+ * initialized.
+ * @param region the initial contents of the transaction
+ * container. This should be a pointer to an initialized
+ * `arcp_region`, or `NULL`.
  */
-static inline void *atxn_item_init(struct atxn_item *item, void (*destroy)(struct atxn_item *)) {
-    atomic_init(&item->header.refcount, 1);
-    item->header.destroy = destroy;
-    return ATXN_ITEM2PTR(item);
-}
-
-static inline int atxn_refcount(void *ptr) {
-    union {
-	volatile int16_t s;
-	volatile uint16_t u;
-    } refcount;
-    refcount.u = atomic_load_explicit(&ATXN_PTR2ITEM(ptr)->header.refcount, memory_order_acquire) & 0xFFFF;
-    return refcount.s;
-}
-
-static inline int atxn_txncount(void *ptr) {
-    union {
-	volatile int16_t s;
-	volatile uint16_t u;
-    } txncount;
-    txncount.u = atomic_load_explicit(&ATXN_PTR2ITEM(ptr)->header.refcount, memory_order_acquire) >> 16;
-    return txncount.s;
-}
+int atxn_init(atxn_t *txn, struct arcp_region *region);
 
 /**
- * Increments the reference count of a `struct atxn_item` pointer.
+ * Destroys a transaction container.
  *
- * This is intended for situations in which a single thread is passing
- * a reference among different memory regions. Contention should not
- * be an issue in this transfer.
- *
- * @param ptr the pointer whose reference count should be incremented.
+ * @param txn the transaction container to destroy.
  */
-static inline void atxn_incref(void *ptr) {
-    if(ptr != NULL) {
-	__atxn_urefs(ATXN_PTR2ITEM(ptr), 0, 1);
-    }
-}
-
-/**
- * Initializes a transaction.
- *
- * @param txn a pointer to the transaction being initialized.
- * @param ptr initial contents of the transaction. This should be a
- * pointer to the memory region corresponding to an initialized
- * `atxn_item`, or `NULL`.
- */
-static inline void atxn_init(atxn_t *txn, void *ptr) {
-    if(ptr != NULL) {
-	__atxn_urefs(ATXN_PTR2ITEM(ptr), 1, 0);
-	atomic_thread_fence(memory_order_seq_cst);
-    }
-    atomic_ptr_store_explicit(&txn->ptr, ptr, memory_order_release);
-}
-
-/**
- * Destroys a transaction.
- *
- * @param txn the transaction to destroy.
- */
-/* The transaction drops its reference to ptr */
 static inline void atxn_destroy(atxn_t *txn) {
-    void *ptr;
-    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange_explicit(&txn->ptr, NULL, memory_order_acq_rel)) != NULL) {
-	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
-	if(__atxn_urefs(item, -1, ATXN_PTR2COUNT(ptr)) == 0) {
-	    if(item->header.destroy != NULL) {
-		item->header.destroy(item);
-	    }
-	}
-    }
+    arcp_store(&txn->rcp, NULL);
 }
 
 /**
- * Acquire a transaction's contents.
+ * Load the contents of an atxn outside of the context of an open
+ * transaction.
  *
- * @param txn the transaction from which to acquire the current
- * contents.
+ * @param txn the transaction container from which to acquire the
+ * current contents.
  *
- * @returns pointer to the memory region for the particular
- * transaction item.
+ * @returns pointer to the contents of this item.
  */
-static inline void *atxn_acquire(atxn_t *txn) {
-    void *ptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
-    do {
-	while(ATXN_PTR2COUNT(ptr) == ATXN_ALIGN - 1) {
-	    /* Spinlock if too many threads are accessing this at once. */
-	    ptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
-	}
-    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &ptr, ptr + 1,
-								memory_order_acq_rel, memory_order_acquire)));
-    ptr += 1;
-    /* We have one reference */
-    void *ret = ATXN_PTRDECOUNT(ptr);
-    if(ret != NULL) {
-	__atxn_urefs(ATXN_PTR2ITEM(ret), 0, 1);
-    }
-    /* We have two references, try and remove the one from the pointer. */
-    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &ptr, ptr - 1,
-							      memory_order_acq_rel, memory_order_acquire))) {
-	/* Is the pointer still valid? */
-	if(ATXN_PTRDECOUNT(ptr) != ret) {
-	    /* Somebody else has transferred / will transfer the
-	     * count. */
-	    if(ret != NULL) {
-		__atxn_urefs(ATXN_PTR2ITEM(ret), 0, -1);
-	    }
-	    break;
-	}
-    }
-    return ret;
-}
+struct arcp_region *atxn_load1(atxn_t *txn);
 
 /**
- * Peek at a transaction's contents without affecting the reference
- * count.
+ * Load the contents of an atxn outside of the context of an open
+ * transaction without affecting the reference count.
  *
- * @param txn the transaction from which to look at the current
- * contents.
+ * @param txn the transaction container from which to acquire the
+ * current contents.
  *
- * @returns pointer to the memory region for the particular
- * transaction item.
+ * @returns pointer to the contents of this item.
  */
-static inline void *atxn_peek(atxn_t *txn) {
-    return ATXN_PTRDECOUNT(atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire));
-}
+struct arcp_region *atxn_load_weak1(atxn_t *txn);
 
 /**
- * Checks to see if the content of the transaction is equal to the
- * provided pointer during some moment of this call.
+ * Release a pointer acquired with atxn_load1. Convenience
+ * wrapper for arcp_release.
  *
- * @param txn the transaction to check.
+ * Note that pointers acquired with the normal transaction semantics
+ * (as opposed to atxn_load1) have a lifespan equal to that of the
+ * transaction, and are automatically released on closing that
+ * transaction.
+ *
  * @param ptr pointer to the memory region for a particular
  * transaction item.
- *
- * @returns true if `ptr` is equal to the content, false otherwise.
+ * 
  */
-static inline bool atxn_check(atxn_t *txn, void *ptr) {
-    return ATXN_PTRDECOUNT(atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire)) == ptr;
+static inline void atxn_release1(struct arcp_region *region) {
+    arcp_release(region);
 }
 
 /**
- * Releases a reference to a `struct atxn_item` pointer.
+ * Open a transaction and return a handle to that transaction.
  *
- * @param ptr the pointer to release a reference to.
+ * @returns a pointer to the transaction handle.
  */
-static inline void atxn_release(void *ptr) {
-    if(ptr != NULL) {
-	/* if count is not transferred before this call, count will go
-	 * negative instead of 0 and the transferer will be
-	 * responsible for freeing the variable, if needed. */
-	struct atxn_item *item = ATXN_PTR2ITEM(ptr);
-	if(__atxn_urefs(item, 0, -1) == 0) {
-	    if(item->header.destroy != NULL) {
-		item->header.destroy(item);
-	    }
-	}
-    }
+atxn_handle_t *atxn_start();
+
+/**
+ * Abort and close a transaction, releasing all acquired values.
+ *
+ * @param handle a pointer to the handle of the transaction to abort
+ * and close.
+ */
+static inline void atxn_abort(atxn_handle_t *handle) {
+    arcp_release((struct arcp_region *) handle);
 }
 
 /**
- * Commit a new item as the content of the transaction.
+ * Get the status of an open transaction.
  *
- * Only suceeds if `oldptr` is still the content of the
- * transaction. The caller's references are untouched, so call
- * `atxn_item_release()` on oldptr and/or newptr if you no longer
- * intend to reference them.
+ * Useful to check on possible errors after `atxn_acquire` or
+ * `atxn_set`. Note that errors or failure during those methods
+ * should be followed by aborting the transaction with `atxn_abort`.
  *
- * @param txn the transaction for which to commit the new content.
- * @param oldptr the previous content of the transaction.
- * @param newptr the new content of the transaction.
- *
- * @returns true if the commit was successful, false otherwise.
+ * @param handle a pointer to the handle of the transaction to get the
+ * status of.
  */
-static inline bool atxn_commit(atxn_t *txn, void *oldptr, void *newptr) {
-    void *localptr = atomic_ptr_load_explicit(&txn->ptr, memory_order_acquire);
-    if(newptr != NULL) {
-	__atxn_urefs(ATXN_PTR2ITEM(newptr), 1, 0);
-    }
-    do {
-	if(ATXN_PTRDECOUNT(localptr) != oldptr) {
-	    /* fail */
-	    if(newptr != NULL) {
-		__atxn_urefs(ATXN_PTR2ITEM(newptr), -1, 0);
-	    }
-	    return false;
-	}
-    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&txn->ptr, &localptr, newptr,
-								memory_order_seq_cst, memory_order_relaxed)));
-    /* success! */
-    if(oldptr != NULL) {
-	/* Transfer count */
-	__atxn_urefs(ATXN_PTR2ITEM(oldptr), -1, ATXN_PTR2COUNT(localptr));
-	/* refcount can't reach 0 here as the caller should still own a reference to oldptr */
-    }
-    return true;
+static inline enum atxn_status atxn_status(atxn_handle_t *handle) {
+    return (enum atxn_status) atomic_load_explicit(&handle->status, memory_order_acquire);
 }
 
 /**
- * Store a new item as the content of the transaction.
+ * Acquire a value within an open transaction.
  *
- * This is unconditional and should only be used in special
- * circumstances. The caller's references are untouched, so call
- * `atxn_item_release()` on newptr if you no longer intend to
- * reference it.
+ * The values obtained during an open transaction will appear as
+ * though they were obtained during a single moment. If we are
+ * obtaining a new value and a value we have previously acquired has
+ * changed since it was obtained, atxn_acquire will fail with
+ * NULL. However, NULL is also a valid value for a transaction
+ * container, so `atxn_status` should be run to get the full
+ * result.
  *
- * @param txn the transaction for which to commit the new content.
- * @param newptr the new content of the transaction.
+ * Values acquired are referenced exactly as long as the transaction
+ * is open, and the reference expires as soon as it is closed.
  *
- * @returns true if the commit was successful, false otherwise.
+ * @param handle a pointer to the handle of the transaction for which
+ * to acquire this value.
+ * @param txn the transaction container from which to get the value.
+ * @param region a pointer to a region pointer in which the value will
+ * be returned.
+ *
+ * @returns 0 on success, nonzero on error.  Failure can happen either
+ * because of error or because the transaction semantics could not be
+ * guaranteed.
  */
-static inline void atxn_store(atxn_t *txn, void *newptr) {
-    if(newptr != NULL) {
-	__atxn_urefs(ATXN_PTR2ITEM(newptr), 1, 0);
-    }
-    void *ptr;
-    if(ATXN_PTRDECOUNT(ptr = atomic_ptr_exchange_explicit(&txn->ptr, newptr, memory_order_seq_cst)) != NULL) {
-	struct atxn_item *item = ATXN_PTR2ITEM(ATXN_PTRDECOUNT(ptr));
-	if(__atxn_urefs(item, -1, ATXN_PTR2COUNT(ptr)) == 0) {
-	    if(item->header.destroy != NULL) {
-		item->header.destroy(item);
-	    }
-	}
-    }
-}
+int atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region);
+
+/**
+ *
+ * Set a value within an open transaction.
+ *
+ * @param handle a pointer to the handle of the transaction for which
+ * to set this value.
+ * @param txn the transaction container in which to set the value.
+ * @param value the new content of the transaction container.
+ *
+ * @returns 0 on success, nonzero on error.  Failure can happen either
+ * because of error or because the transaction semantics could not be
+ * guaranteed.
+ */
+int atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value);
+
+/**
+ * Commit and close the transaction, returning the resulting status.
+ *
+ * @param handle a pointer to the handle of the transaction to commit.
+ *
+ * @returns the final status of the transaction.
+ */
+enum atxn_status atxn_commit(atxn_handle_t *handle);
 
 #endif /* ! ATOMICKIT_ATOMIC_TXN_H */

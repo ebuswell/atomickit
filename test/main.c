@@ -23,13 +23,15 @@
 int run_atomic_h_test_suite();
 int run_atomic_float_h_test_suite();
 int run_atomic_pointer_h_test_suite();
-int run_atomic_txn_h_test_suite();
+int run_atomic_rcp_h_test_suite();
 int run_atomic_queue_h_test_suite();
 int run_atomic_malloc_h_test_suite();
-int run_atomic_mtxn_h_test_suite();
+int run_atomic_txn_h_test_suite();
 
 int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
     int r;
+
+    /* test_config_nofork(); */
 
     r = run_atomic_h_test_suite();
     if(r != 0) {
@@ -46,7 +48,7 @@ int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) 
 	fprintf(stderr, "Failed to run tests");
 	exit(EXIT_FAILURE);
     }
-    r = run_atomic_txn_h_test_suite();
+    r = run_atomic_rcp_h_test_suite();
     if(r != 0) {
 	fprintf(stderr, "Failed to run tests");
 	exit(EXIT_FAILURE);
@@ -61,7 +63,7 @@ int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) 
 	fprintf(stderr, "Failed to run tests");
 	exit(EXIT_FAILURE);
     }
-    r = run_atomic_mtxn_h_test_suite();
+    r = run_atomic_txn_h_test_suite();
     if(r != 0) {
 	fprintf(stderr, "Failed to run tests");
 	exit(EXIT_FAILURE);

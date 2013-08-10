@@ -81,8 +81,11 @@ extern void __AK_64not_implemented(void)
 #define ATOMIC_VAR_INIT(/* C */ value) { (value) }
 
 /* void */
-#define atomic_init(/* volatile A * */ obj, /* C */ value)	\
-    (obj)->counter = (value)
+#define atomic_init(/* volatile A * */ obj, /* C */ value)\
+({							  \
+    volatile __typeof__(obj) __ptr = (obj);		  \
+    __ptr->counter = (value);				  \
+})
 
 /* void */
 #define atomic_thread_fence(/* memory_order */ order)	\

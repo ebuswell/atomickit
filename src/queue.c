@@ -1,10 +1,9 @@
-#include "atomickit/atomic-txn.h"
+#include "atomickit/atomic-rcp.h"
 #include "atomickit/atomic-queue.h"
+#include "atomickit/atomic-malloc.h"
 
-void __aqueue_txitem_destroy(struct atxn_item *item) {
-    struct aqueue_node *node = AQUEUE_TXITEM2NODE(item);
-    atxn_destroy(&node->header.next);
-    if(node->header.destroy != NULL) {
-	node->header.destroy(node);
-    }
+void __aqueue_node_destroy(struct aqueue_node *node) {
+    arcp_store(&node->next, NULL);
+    arcp_store(&node->item, NULL);
+    afree(node, sizeof(struct aqueue_node));
 }

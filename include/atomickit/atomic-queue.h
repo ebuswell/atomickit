@@ -31,110 +31,53 @@
 #define ATOMICKIT_ATOMIC_QUEUE_H 1
 
 #include <stdbool.h>
-#include <atomickit/atomic-txn.h>
-
-/**
- * The size of the aqueue_node that is not the user data.
- */
-#define AQUEUE_NODE_OVERHEAD (offsetof(struct aqueue_node, data))
-
-struct aqueue_node;
-
-void __aqueue_txitem_destroy(struct atxn_item *item);
-
-/**
- * Queue node header
- */
-struct aqueue_node_header {
-    void (*destroy)(struct aqueue_node *); /** pointer to user provided destruction function */
-    atxn_t next; /** the next item in the queue */
-    struct atxn_item_header txitem_header __attribute__((aligned(ATXN_ALIGN))); /** atxn_item header */
-};
-
-#define AQUEUE_NODE_HEADER_VAR_INIT(destroy, txncount, refcount) { destroy, ATXN_VAR_NULL_INIT, \
-	    ATXN_ITEM_HEADER_VAR_INIT(__aqueue_txitem_destroy, txncount, refcount) }
+#include <atomickit/atomic-rcp.h>
+#include <atomickit/atomic-malloc.h>
 
 /**
  * Queue node
- *
- * Good code will not depend on the contents of this struct.
  */
 struct aqueue_node {
-    struct aqueue_node_header header;
-    uint8_t data[1] __attribute__((aligned(ATXN_ALIGN))); /** user-defined data area */
+    struct arcp_region_header header;
+    arcp_t next; /** the next item in the queue */
+    arcp_t item; /** the content of this node */
 };
-
-#define AQUEUE_SENTINEL_HEADER_VAR_INIT(destroy) AQUEUE_NODE_HEADER_VAR_INIT(destroy, 2, 0)
-
-/**
- * Get the node for the corresponding node data.
- */
-#define AQUEUE_PTR2NODE(ptr) ((struct aqueue_node *) (((intptr_t) (ptr)) - (offsetof(struct aqueue_node, data))))
-/**
- * Get the node data for the corresponding node.
- */
-#define AQUEUE_NODE2PTR(item) ((void *) (((intptr_t) (item)) + (offsetof(struct aqueue_node, data))))
-/**
- * Get the node for the corresponding atxn_item
- */
-#define AQUEUE_TXITEM2NODE(item) ((struct aqueue_node *) (((intptr_t) (item)) - (offsetof(struct aqueue_node_header, txitem_header))))
-/**
- * Get the atxn_item for the corresponding node
- */
-#define AQUEUE_NODE2TXITEM(item) ((struct atxn_item *) (((intptr_t) (item)) + (offsetof(struct aqueue_node_header, txitem_header))))
-
 
 /**
  * Atomic Queue.
  */
 typedef struct {
-    atxn_t head;
-    atxn_t tail;
+    arcp_t head;
+    arcp_t tail;
 } aqueue_t;
 
-#define AQUEUE_VAR_INIT(sentinel) { ATXN_VAR_INIT(AQUEUE_NODE2TXITEM(sentinel)), ATXN_VAR_INIT(AQUEUE_NODE2TXITEM(sentinel)) }
+void __aqueue_node_destroy(struct aqueue_node *node);
 
-/**
- * Initializes a queue node and returns a pointer to its coresponding
- * memory region.
- *
- * The node has a single reference at this point, belonging to the
- * calling function.
- *
- * @param node a pointer to a queue node.  This is typically allocated
- * with `malloc(AQUEUE_NODE_OVERHEAD + <user data size>).
- * @param destroy pointer to a function that will destroy the
- * allocated node once it is no longer in use.  If no cleanup is
- * needed, this could just be `free`.
- *
- * @returns a pointer to the memory region that corresponds with the
- * node.
- */
-static inline void *aqueue_node_init(struct aqueue_node *node, void (*destroy)(struct aqueue_node *)) {
-    node->header.destroy = destroy;
-    atxn_init(&node->header.next, NULL);
-    return atxn_item_init(AQUEUE_NODE2TXITEM(node), __aqueue_txitem_destroy);
-}
+#define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item) { ARCP_REGION_HEADER_VAR_INIT(ptrcount, refcount, NULL), ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
 
-/**
- * Releases a reference to a queue node. Convenience wrapper for
- * `atxn_release`.
- *
- * @param item the pointer to release a reference to.
- */
-#define aqueue_node_release(item) atxn_release(item);
+#define AQUEUE_SENTINEL_VAR_INIT(ptrcount, refcount, next) AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, NULL)
+
+#define AQUEUE_VAR_INIT(head, tail) { ARCP_VAR_INIT(head), ARCP_VAR_INIT(tail) }
 
 /**
  * Initializes a queue.
  *
  * @param queue a pointer to the queue being initialized.
- * @param node a pointer to the (zero-size) memory region
- * corresponding to an already initialized `aqueue_node`. This node is
- * a sentinel and will not be returned.
+ *
+ * @returns zero on success, nonzero on error.
  */
-static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
-    atxn_init(&aqueue->head, sentinel);
-    atxn_init(&aqueue->tail, sentinel);
+static inline int aqueue_init(aqueue_t *aqueue) {
+    struct aqueue_node *sentinel = amalloc(sizeof(struct aqueue_node));
+    if(sentinel == NULL) {
+	return -1;
+    }
+    arcp_init(&sentinel->next, NULL);
+    arcp_region_init((struct arcp_region *) sentinel, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
+
+    arcp_init(&aqueue->head, (struct arcp_region *) sentinel);
+    arcp_init(&aqueue->tail, (struct arcp_region *) sentinel);
+    arcp_release((struct arcp_region *) sentinel);
+    return 0;
 }
 
 /**
@@ -142,30 +85,34 @@ static inline void aqueue_init(aqueue_t *aqueue, void *sentinel) {
  *
  * @param aqueue a pointer to the queue in which the item is being
  * enqueued.
- * @param item a pointer to the memory region corresponding to the
- * item to enqueue.
+ * @param item a pointer to the item to enqueue.
+ *
+ * @returns zero on success, nonzero on error.
  */
-static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
-    struct aqueue_node *node = AQUEUE_PTR2NODE(item);
-    atxn_store(&node->header.next, NULL);
+static inline int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
+    struct aqueue_node *node = amalloc(sizeof(struct aqueue_node));
+    if(node == NULL) {
+	return -1;
+    }
+    arcp_init(&node->item, item);
+    arcp_init(&node->next, NULL);
+    arcp_region_init((struct arcp_region *) node, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
 
-    void *tailptr;
-    void *nextptr;
     struct aqueue_node *tail;
+    struct aqueue_node *next;
     for(;;) {
-	tailptr = atxn_acquire(&aqueue->tail);
-	tail = AQUEUE_PTR2NODE(tailptr);
-	nextptr = atxn_acquire(&tail->header.next);
-	if(unlikely(nextptr != NULL)) {
-	    atxn_commit(&aqueue->tail, tailptr, nextptr);
-	} else if(likely(atxn_commit(&tail->header.next, nextptr, item))) {
-	    atxn_commit(&aqueue->tail, tailptr, item);
-	    atxn_release(nextptr);
-	    atxn_release(tailptr);
-	    return;
+	tail = (struct aqueue_node *) arcp_load(&aqueue->tail);
+	next = (struct aqueue_node *) arcp_load(&tail->next);
+	if(unlikely(next != NULL)) {
+	    arcp_compare_exchange(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
+	} else if(likely(arcp_compare_exchange(&tail->next, NULL, (struct arcp_region *) node))) {
+	    arcp_compare_exchange(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
+	    arcp_release((struct arcp_region *) tail);
+	    arcp_release((struct arcp_region *) node);
+	    return 0;
 	}
-	atxn_release(nextptr);
-	atxn_release(tailptr);
+	arcp_release((struct arcp_region *) next);
+	arcp_release((struct arcp_region *) tail);
     }
 }
 
@@ -175,26 +122,26 @@ static inline void aqueue_enq(aqueue_t *aqueue, void *item) {
  * @param aqueue a pointer to the queue from which the item is being
  * dequeued.
  *
- * @returns a pointer to the memory region corresponding to the
- * dequeued item.
+ * @returns a pointer to the dequeued item.
  */
-static inline void *aqueue_deq(aqueue_t *aqueue) {
-    void *headptr;
-    void *nextptr;
+static inline struct arcp_region *aqueue_deq(aqueue_t *aqueue) {
+    struct aqueue_node *head;
+    struct aqueue_node *next;
     for(;;) {
-	headptr = atxn_acquire(&aqueue->head);
-	nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
-	if(nextptr == NULL) {
-	    atxn_release(headptr);
+	head = (struct aqueue_node *) arcp_load(&aqueue->head);
+	next = (struct aqueue_node *) arcp_load(&head->next);
+	if(next == NULL) {
+	    arcp_release((struct arcp_region *) head);
 	    return NULL;
 	}
-	if(likely(atxn_commit(&aqueue->head, headptr, nextptr))) {
-	    /* DON'T release next */
-	    atxn_release(headptr);
-	    return nextptr;
+	if(likely(arcp_compare_exchange(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	    struct arcp_region *item = arcp_exchange(&next->item, NULL);
+	    arcp_release((struct arcp_region *) next);
+	    arcp_release((struct arcp_region *) head);
+	    return item;
 	}
-	atxn_release(nextptr);
-	atxn_release(headptr);
+	arcp_release((struct arcp_region *) next);
+	arcp_release((struct arcp_region *) head);
     }
 }
 
@@ -207,12 +154,28 @@ static inline void *aqueue_deq(aqueue_t *aqueue) {
  * @returns a pointer to the memory region corresponding to the
  * first item in the queue.
  */
-static inline void *aqueue_peek(aqueue_t *aqueue) {
-    void *headptr = atxn_acquire(&aqueue->head);
-    void *nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
-    /* DON'T release next */
-    atxn_release(headptr);
-    return nextptr;
+static inline struct arcp_region *aqueue_peek(aqueue_t *aqueue) {
+    struct aqueue_node *head;
+    struct aqueue_node *next;
+    struct arcp_region *item;
+    for(;;) {
+	head = (struct aqueue_node *) arcp_load(&aqueue->head);
+	next = (struct aqueue_node *) arcp_load(&head->next);
+	if(next == NULL) {
+	    arcp_release((struct arcp_region *) head);
+	    return NULL;
+	}
+	item = arcp_load(&next->item);
+	arcp_release((struct arcp_region *) head);
+	arcp_release((struct arcp_region *) next);
+	if(item == NULL) {
+	    atomic_thread_fence(memory_order_seq_cst);
+	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
+		continue;
+	    }
+	}
+	return item;
+    }
 }
 
 /**
@@ -225,30 +188,43 @@ static inline void *aqueue_peek(aqueue_t *aqueue) {
  *
  * @returns true if the item was dequeued, false otherwise.
  */
-static inline bool aqueue_deq_cond(aqueue_t *aqueue, void *item) {
-    void *headptr;
-    void *nextptr;
+static inline bool aqueue_compare_deq(aqueue_t *aqueue, struct arcp_region *item) {
+    struct aqueue_node *head;
+    struct aqueue_node *next;
+    struct arcp_region *c_item;
     for(;;) {
-	headptr = atxn_acquire(&aqueue->head);
-	nextptr = atxn_acquire(&(AQUEUE_PTR2NODE(headptr)->header.next));
-	if(nextptr != item) {
-	    atxn_release(headptr);
-	    atxn_release(nextptr);
+	head = (struct aqueue_node *) arcp_load(&aqueue->head);
+	next = (struct aqueue_node *) arcp_load(&head->next);
+	if(next == NULL) {
+	    arcp_release((struct arcp_region *) head);
 	    return false;
 	}
-	if(nextptr == NULL) {
-	    /* We only get here if the caller *wants* us to be
-	     * empty... */
-	    atxn_release(headptr);
+	c_item = arcp_load_weak(&next->item);
+	if(c_item == NULL) {
+	    if(item != NULL) {
+		arcp_release((struct arcp_region *) next);
+		arcp_release((struct arcp_region *) head);
+		return false;
+	    }
+	    atomic_thread_fence(memory_order_seq_cst);
+	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
+		arcp_release((struct arcp_region *) next);
+		arcp_release((struct arcp_region *) head);
+		continue;
+	    }
+	} else if(c_item != item) {
+	    arcp_release((struct arcp_region *) next);
+	    arcp_release((struct arcp_region *) head);
+	    return false;
+	}
+	if(likely(arcp_compare_exchange(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	    arcp_store(&next->item, NULL);
+	    arcp_release((struct arcp_region *) next);
+	    arcp_release((struct arcp_region *) head);
 	    return true;
 	}
-	if(likely(atxn_commit(&aqueue->head, headptr, nextptr))) {
-	    atxn_release(headptr);
-	    atxn_release(nextptr);
-	    return true;
-	}
-	atxn_release(nextptr);
-	atxn_release(headptr);
+	arcp_release((struct arcp_region *) next);
+	arcp_release((struct arcp_region *) head);
     }
 }
 
@@ -256,15 +232,13 @@ static inline bool aqueue_deq_cond(aqueue_t *aqueue, void *item) {
  * Destroys a queue.
  *
  * @param queue a pointer to the queue being destroyed.
+ *
+ * @returns zero on success or nonzero if one or more of the contained
+ * items failed in the destructor.
  */
 static inline void aqueue_destroy(aqueue_t *aqueue) {
-    void *node;
-    while((node = aqueue_deq(aqueue)) != NULL) {
-	aqueue_node_release(node);
-    }
-    /* Now we should have one node left... */
-    atxn_destroy(&aqueue->head);
-    atxn_destroy(&aqueue->tail);
+    arcp_store(&aqueue->head, NULL);
+    arcp_store(&aqueue->tail, NULL);
 }
 
 #endif /* ! ATOMICKIT_ATOMIC_QUEUE_H */

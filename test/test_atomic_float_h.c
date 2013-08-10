@@ -23,10 +23,6 @@
 static volatile atomic_float afloat;
 static volatile atomic_double adouble;
 
-static void test_atomic_float_blank_fixture(void (*test)()) {
-    test();
-}
-
 static void test_atomic_float_init() {
     CHECKPOINT();
     atomic_float_init(&afloat, 2.1f);
@@ -120,7 +116,7 @@ int run_atomic_float_h_test_suite() {
     void (*atomic_float_blank_tests[])() = { test_atomic_float_init, test_atomic_float_is_lock_free, NULL };
     char *atomic_float_blank_test_names[] = { "atomic_float_init", "atomic_float_is_lock_free", NULL };
 
-    r = run_test_suite(test_atomic_float_blank_fixture, atomic_float_blank_test_names, atomic_float_blank_tests);
+    r = run_test_suite(NULL, atomic_float_blank_test_names, atomic_float_blank_tests);
     if(r != 0) {
 	return r;
     }
