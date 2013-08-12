@@ -220,11 +220,11 @@ int run_atomic_rcp_h_test_suite() {
     }
 
     void (*arcp_init_tests[])() = { test_arcp_load, test_arcp_load_weak,
-				    test_arcp_compare_exchange, test_arcp_store,
-				    test_arcp_release, NULL };
+				    test_arcp_compare_exchange, NULL,
+				    test_arcp_store, test_arcp_release, NULL };
     char *arcp_init_test_names[] = { "arcp_load", "arcp_load_weak",
-				     "arcp_compare_exchange", "arcp_store",
-				     "arcp_release", NULL };
+				     "arcp_compare_exchange", "arcp_compare_exchange_release",
+				     "arcp_store", "arcp_release", NULL };
     r = run_test_suite(test_arcp_init_fixture, arcp_init_test_names, arcp_init_tests);
     if(r != 0) {
 	return r;

@@ -104,15 +104,13 @@ static inline int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
 	tail = (struct aqueue_node *) arcp_load(&aqueue->tail);
 	next = (struct aqueue_node *) arcp_load(&tail->next);
 	if(unlikely(next != NULL)) {
-	    arcp_compare_exchange(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
+	    arcp_compare_exchange_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
 	} else if(likely(arcp_compare_exchange(&tail->next, NULL, (struct arcp_region *) node))) {
-	    arcp_compare_exchange(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
-	    arcp_release((struct arcp_region *) tail);
-	    arcp_release((struct arcp_region *) node);
+	    arcp_compare_exchange_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
 	    return 0;
+	} else {
+	    arcp_release((struct arcp_region *) tail);
 	}
-	arcp_release((struct arcp_region *) next);
-	arcp_release((struct arcp_region *) tail);
     }
 }
 

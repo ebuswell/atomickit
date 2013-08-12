@@ -163,9 +163,7 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
  * Initializes a reference counted region.
  *
  * The region has a single reference after initialization, belonging
- * to the calling function. This contains a full memory barrier, so
- * it's best to write the region user data prior to calling this
- * function.
+ * to the calling function.
  *
  * @param region a pointer to a reference counted region.  This is
  * typically allocated with `amalloc(ARCP_REGION_OVERHEAD + <user data
@@ -177,7 +175,6 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
 static inline void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *)) {
     atomic_init(&region->header.refcount, 1);
     region->header.destroy = destroy;
-    atomic_thread_fence(memory_order_seq_cst);
 }
 
 /**
@@ -272,7 +269,7 @@ static inline void arcp_init(arcp_t *rcp, struct arcp_region *region) {
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    atomic_ptr_store_explicit(&rcp->ptr, region, memory_order_release);
+    atomic_ptr_store(&rcp->ptr, region); /* full barrier */
 }
 
 /**
@@ -289,7 +286,7 @@ static inline void arcp_store(arcp_t *rcp, struct arcp_region *region) {
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    void *ptr = atomic_ptr_exchange_explicit(&rcp->ptr, region, memory_order_acq_rel);
+    void *ptr = atomic_ptr_exchange(&rcp->ptr, region);
     struct arcp_region *oldregion = ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
 	if(__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr)) == 0) {
@@ -369,7 +366,7 @@ static inline struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region 
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    void *ptr = atomic_ptr_exchange_explicit(&rcp->ptr, region, memory_order_acq_rel);
+    void *ptr = atomic_ptr_exchange(&rcp->ptr, region); /* full barrier */
     struct arcp_region *oldregion = ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
 	__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr) + 1);
@@ -409,12 +406,44 @@ static inline bool arcp_compare_exchange(arcp_t *rcp, struct arcp_region *oldreg
 	    return false;
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, newregion,
-								memory_order_acq_rel, memory_order_relaxed)));
+								memory_order_seq_cst, memory_order_acquire))); /* full barrier */
     /* success! */
-    if(ptr != NULL) {
+    if(oldregion != NULL) {
 	/* Transfer count */
 	__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr));
 	/* refcount can't reach 0 here as the caller should still own a reference to oldptr */
+    }
+    return true;
+}
+
+static inline bool arcp_compare_exchange_release(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
+    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+    if(newregion != NULL) {
+	__arcp_urefs(newregion, 1, -1);
+    }
+    do {
+	if(ARCP_PTRDECOUNT(ptr) != oldregion) {
+	    /* fail */
+	    if(newregion != NULL) {
+		if(__arcp_urefs(newregion, -1, 0) == 0) {
+		    if(newregion->header.destroy != NULL) {
+			newregion->header.destroy(newregion);
+		    }
+		}
+	    }
+	    arcp_release(oldregion);
+	    return false;
+	}
+    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, newregion,
+								memory_order_seq_cst, memory_order_acquire))); /* full barrier */
+    /* success! */
+    if(oldregion != NULL) {
+	/* Transfer count */
+	if(__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr) - 1) == 0) {
+	    if(oldregion->header.destroy != NULL) {
+		oldregion->header.destroy(oldregion);
+	    }
+	}
     }
     return true;
 }
