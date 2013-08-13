@@ -100,10 +100,10 @@ static inline void *randomptr() {
 	strcpy(buf, msgstart);						\
 	if(strerror_r(errno, buf + strlen(msgstart), 128 - strlen(msgstart)) == 0) { \
 	    strcpy(buf + strlen(buf), "\n");				\
-	    write(STDERR_FILENO, buf, strlen(buf));			\
+	    (void) write(STDERR_FILENO, buf, strlen(buf));		\
 	} else {							\
 	    const char *plainmsg = msg "\n";				\
-	    write(STDERR_FILENO, plainmsg, strlen(plainmsg));		\
+	    (void) write(STDERR_FILENO, plainmsg, strlen(plainmsg));	\
 	}								\
     } while(0)
 
