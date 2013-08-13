@@ -27,7 +27,7 @@ libatomickit_la_CFLAGS = $(CFLAGS) -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
 libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-rcp.h include/atomickit/atomic-queue.h include/atomickit/atomic-malloc.h include/atomickit/atomic-txn.h include/atomickit/atomic-array.h
-libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.h
+libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.h include/@HOST_ARCH_SRC@/atomickit/arch/processor.h
 
 pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
