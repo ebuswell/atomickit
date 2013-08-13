@@ -94,16 +94,24 @@ static inline void aary_storelast(struct aary *array, struct arcp_region *region
 }
 
 struct aary *aary_insert(struct aary *array, size_t i, struct arcp_region *region);
+struct aary *aary_dup_insert(struct aary *array, size_t i, struct arcp_region *region);
 struct aary *aary_remove(struct aary *array, size_t i);
+struct aary *aary_dup_remove(struct aary *array, size_t i);
 struct aary *aary_append(struct aary *array, struct arcp_region *region);
+struct aary *aary_dup_append(struct aary *array, struct arcp_region *region);
 struct aary *aary_pop(struct aary *array);
+struct aary *aary_dup_pop(struct aary *array);
 struct aary *aary_prepend(struct aary *array, struct arcp_region *region);
+struct aary *aary_dup_prepend(struct aary *array, struct arcp_region *region);
 struct aary *aary_shift(struct aary *array);
+struct aary *aary_dup_shift(struct aary *array);
 void aary_sortx(struct aary *array);
 void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *), void *arg);
 void aary_reverse(struct aary *array);
 struct aary *aary_set_add(struct aary *array, struct arcp_region *region);
+struct aary *aary_dup_set_add(struct aary *array, struct arcp_region *region);
 struct aary *aary_set_remove(struct aary *array, struct arcp_region *region);
+struct aary *aary_dup_set_remove(struct aary *array, struct arcp_region *region);
 bool aary_set_contains(struct aary *array, struct arcp_region *region);
 
 #endif /* ! ATOMICKIT_ATOMIC_ARRAY_H */
