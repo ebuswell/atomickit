@@ -50,4 +50,8 @@
 # include <atomickit/arch/compat.h>
 #endif
 
+#ifndef cpu_relax
+# include <atomickit/arch/processor.h>
+#endif
+
 #endif /* ! ATOMICKIT_ATOMIC_H */

@@ -66,7 +66,7 @@ struct aary *aary_insert(struct aary *array, size_t i, struct arcp_region *regio
 	if(new_array == NULL) {
 	    return NULL;
 	}
-	memcpy(&new_array->items[0], &array->items[0], sizeof(struct arcp_region *) * i);
+	memcpy(new_array, array, AARY_SIZE(i));
 	memcpy(&new_array->items[i + 1], &array->items[i], sizeof(struct arcp_region *) * (length - i));
 	afree(array, AARY_SIZE(length));
 	array = new_array;
@@ -75,6 +75,28 @@ struct aary *aary_insert(struct aary *array, size_t i, struct arcp_region *regio
     arcp_incref(region);
     array->items[i] = region;
     return array;
+}
+
+struct aary *aary_dup_insert(struct aary *array, size_t i, struct arcp_region *region) {
+    size_t length = array->length;
+    struct aary *new_array = amalloc(AARY_SIZE(length + 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 0; j < i; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j] = array->items[j];
+    }
+    for(; j < length; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j + 1] = array->items[j];
+    }
+    new_array->length = length + 1;
+    arcp_incref(region);
+    new_array->items[i] = region;
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
 }
 
 struct aary *aary_remove(struct aary *array, size_t i) {
@@ -89,7 +111,7 @@ struct aary *aary_remove(struct aary *array, size_t i) {
 	if(new_array == NULL) {
 	    return NULL;
 	}
-	memcpy(&new_array->items[0], &array->items[0], sizeof(struct arcp_region *) * i);
+	memcpy(new_array, array, AARY_SIZE(i));
 	memcpy(&new_array->items[i], &array->items[i + 1], sizeof(struct arcp_region *) * (length - (i + 1)));
 	afree(array, AARY_SIZE(length));
 	array = new_array;
@@ -97,6 +119,28 @@ struct aary *aary_remove(struct aary *array, size_t i) {
     array->length = length - 1;
     arcp_release(region);
     return array;
+}
+
+struct aary *aary_dup_remove(struct aary *array, size_t i) {
+    size_t length = array->length;
+    struct arcp_region *region = array->items[i];
+    struct aary *new_array = amalloc(AARY_SIZE(length - 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 0; j < i; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j] = array->items[j];
+    }
+    for(; j + 1 < length; j++) {
+	arcp_incref(array->items[j + 1]);
+	new_array->items[j] = array->items[j + 1];
+    }
+    new_array->length = length - 1;
+    arcp_release(region);
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
 }
 
 struct aary *aary_append(struct aary *array, struct arcp_region *region) {
@@ -111,6 +155,24 @@ struct aary *aary_append(struct aary *array, struct arcp_region *region) {
     return array;
 }
 
+struct aary *aary_dup_append(struct aary *array, struct arcp_region *region) {
+    size_t length = array->length;
+    struct aary *new_array = amalloc(AARY_SIZE(length + 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 0; j < length; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j] = array->items[j];
+    }
+    new_array->length = length + 1;
+    arcp_incref(region);
+    new_array->items[length] = region;
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
+}
+
 struct aary *aary_pop(struct aary *array) {
     size_t length = array->length;
     struct arcp_region *region = array->items[length - 1];
@@ -123,6 +185,24 @@ struct aary *aary_pop(struct aary *array) {
     return array;
 }
 
+struct aary *aary_dup_pop(struct aary *array) {
+    size_t length = array->length;
+    struct arcp_region *region = array->items[length - 1];
+    struct aary *new_array = amalloc(AARY_SIZE(length - 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 0; j < length - 1; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j] = array->items[j];
+    }
+    new_array->length = length - 1;
+    arcp_release(region);
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
+}
+
 struct aary *aary_prepend(struct aary *array, struct arcp_region *region) {
     size_t length = array->length;
     if(atryrealloc(array, AARY_SIZE(length), AARY_SIZE(length + 1))) {
@@ -132,6 +212,7 @@ struct aary *aary_prepend(struct aary *array, struct arcp_region *region) {
 	if(new_array == NULL) {
 	    return NULL;
 	}
+	memcpy(new_array, array, AARY_OVERHEAD);
 	memcpy(&new_array->items[1], &array->items[0], sizeof(struct arcp_region *) * length);
 	afree(array, AARY_SIZE(length));
 	array = new_array;
@@ -140,6 +221,24 @@ struct aary *aary_prepend(struct aary *array, struct arcp_region *region) {
     arcp_incref(region);
     array->items[0] = region;
     return array;
+}
+
+struct aary *aary_dup_prepend(struct aary *array, struct arcp_region *region) {
+    size_t length = array->length;
+    struct aary *new_array = amalloc(AARY_SIZE(length + 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 0; j < length; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j + 1] = array->items[j];
+    }
+    new_array->length = length + 1;
+    arcp_incref(region);
+    new_array->items[0] = region;
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
 }
 
 struct aary *aary_shift(struct aary *array) {
@@ -154,6 +253,7 @@ struct aary *aary_shift(struct aary *array) {
 	if(new_array == NULL) {
 	    return NULL;
 	}
+	memcpy(new_array, array, AARY_OVERHEAD);
 	memcpy(&new_array->items[0], &array->items[1], sizeof(struct arcp_region *) * (length - 1));
 	afree(array, AARY_SIZE(length));
 	array = new_array;
@@ -161,6 +261,24 @@ struct aary *aary_shift(struct aary *array) {
     array->length = length - 1;
     arcp_release(region);
     return array;
+}
+
+struct aary *aary_dup_shift(struct aary *array) {
+    size_t length = array->length;
+    struct arcp_region *region = array->items[0];
+    struct aary *new_array = amalloc(AARY_SIZE(length - 1));
+    if(new_array == NULL) {
+	return NULL;
+    }
+    size_t j;
+    for(j = 1; j < length; j++) {
+	arcp_incref(array->items[j]);
+	new_array->items[j - 1] = array->items[j];
+    }
+    new_array->length = length - 1;
+    arcp_release(region);
+    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    return new_array;
 }
 
 int __aary_compar(const struct arcp_region *region1, const struct arcp_region *region2) {
@@ -203,6 +321,17 @@ struct aary *aary_set_add(struct aary *array, struct arcp_region *region) {
     return aary_insert(array, i, region);
 }
 
+struct aary *aary_dup_set_add(struct aary *array, struct arcp_region *region) {
+    /* search for region */
+    size_t i;
+    size_t length = array->length;
+    IF_BSEARCH(array->items, 0, length, region, i) {
+	/* Already present; do nothing */
+	return aary_dup(array);
+    } ENDIF_BSEARCH;
+    return aary_dup_insert(array, i, region);
+}
+
 struct aary *aary_set_remove(struct aary *array, struct arcp_region *region) {
     /* search for region */
     size_t i;
@@ -213,6 +342,18 @@ struct aary *aary_set_remove(struct aary *array, struct arcp_region *region) {
     } ENDIF_BSEARCH;
     /* couldn't find it... */
     return array;
+}
+
+struct aary *aary_dup_set_remove(struct aary *array, struct arcp_region *region) {
+    /* search for region */
+    size_t i;
+    size_t length = array->length;
+    IF_BSEARCH(array->items, 0, length, region, i) {
+	/* Found it */
+	return aary_dup_remove(array, i);
+    } ENDIF_BSEARCH;
+    /* couldn't find it... */
+    return aary_dup(array);
 }
 
 bool aary_set_contains(struct aary *array, struct arcp_region *region) {

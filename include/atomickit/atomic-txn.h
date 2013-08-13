@@ -81,14 +81,14 @@ struct atxn_update {
  * The possible resulting statuses of the transaction.
  */
 enum atxn_status {
-    ATXN_PENDING = 0, /** The transaction has not yet finished being
+    ATXN_SUCCESS = 0, /** The transaction was successfully committed. */
+    ATXN_PENDING, /** The transaction has not yet finished being
 		    * processed. It may not have started processing
 		    * either. */
     ATXN_FAILURE, /** The conditions of the transaction could not be
 		    * fulfilled due to one of the acquired things
 		    * having changed. */
     ATXN_ERROR, /** There was an error processing the transaction. */
-    ATXN_SUCCESS /** The transaction was successfully committed. */
 };
 
 /**
@@ -236,7 +236,7 @@ static inline enum atxn_status atxn_status(atxn_handle_t *handle) {
  * because of error or because the transaction semantics could not be
  * guaranteed.
  */
-int atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region);
+enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region);
 
 /**
  *
@@ -251,7 +251,7 @@ int atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region);
  * because of error or because the transaction semantics could not be
  * guaranteed.
  */
-int atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value);
+enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value);
 
 /**
  * Commit and close the transaction, returning the resulting status.

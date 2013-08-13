@@ -33,7 +33,7 @@
 #endif
 
 #ifndef ATOMICKIT_ARCH_COMPAT_H
-#define ATOMICKIT_ARCH_COMPAT_H
+#define ATOMICKIT_ARCH_COMPAT_H 1
 
 #include <stdbool.h>
 #include <stddef.h>

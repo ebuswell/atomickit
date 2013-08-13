@@ -237,14 +237,14 @@ void test_atxn_abort() {
 void test_atxn_status() {
     ASSERT(atxn_status(handle1) == ATXN_PENDING);
     struct arcp_region *rg;
-    int r = atxn_load(handle1, &atxn1, &rg);
-    if(r != 0) {
+    enum atxn_status r = atxn_load(handle1, &atxn1, &rg);
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(atxn_status(handle1) == ATXN_PENDING);
     ASSERT(atxn_status(handle2) == ATXN_PENDING);
     r = atxn_store(handle2, &atxn1, region2);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");	
     }
     ASSERT(atxn_status(handle2) == ATXN_PENDING);
@@ -253,35 +253,37 @@ void test_atxn_status() {
     }
     struct arcp_region *rg2;
     r = atxn_load(handle1, &atxn2, &rg2);
-    ASSERT(r != 0);
+    if(r != ATXN_FAILURE) {
+	UNRESOLVED("atxn_load failed");
+    }
     ASSERT(atxn_status(handle1) == ATXN_FAILURE);
 }
 
 void test_atxn_load() {
     CHECKPOINT();
     struct arcp_region *rg1;
-    int r = atxn_load(handle1, &atxn1, &rg1);
-    ASSERT(r == 0);
+    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
+    ASSERT(r == ATXN_SUCCESS);
     struct arcp_region *rg2;
     r = atxn_load(handle1, &atxn1, &rg2);
-    ASSERT(r == 0);
+    ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(rg2 == region1);
     ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
     struct arcp_region *rg3;
     r = atxn_load(handle1, &atxn2, &rg3);
-    ASSERT(r == 0);
+    ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region2_destroyed);
     ASSERT(rg3 == region2);
     ASSERT(strcmp((char *) rg3->data, ptrtest.string2) == 0);
     r = atxn_store(handle1, &atxn2, region3);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
     }
     struct arcp_region *rg4;
     r = atxn_load(handle1, &atxn2, &rg4);
-    ASSERT(r == 0);
+    ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region3_destroyed);
     ASSERT(rg4 == region3);
     ASSERT(strcmp((char *) rg4->data, ptrtest.string3) == 0);
@@ -291,8 +293,8 @@ void test_atxn_load() {
     ASSERT(!region3_destroyed);
     ASSERT(!region2_destroyed);
     ASSERT(region1_destroyed);
-    r = atxn_init(&atxn1, region2);
-    if(r != 0) {
+    int rr = atxn_init(&atxn1, region2);
+    if(rr != 0) {
 	UNRESOLVED("atxn_init failed");
     }
     CHECKPOINT();
@@ -302,16 +304,16 @@ void test_atxn_load() {
     }
     CHECKPOINT();
     r = atxn_load(handle1, &atxn1, &rg1);
-    ASSERT(r == 0);
+    ASSERT(r == ATXN_SUCCESS);
     r = atxn_store(handle2, &atxn1, region3);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
     	UNRESOLVED("atxn_store failed");
     }
     CHECKPOINT();
     atxn_commit(handle2);
     CHECKPOINT();
     r = atxn_load(handle1, &atxn2, &rg2);
-    ASSERT(r != 0);
+    ASSERT(r == ATXN_FAILURE);
     ASSERT(atxn_status(handle1) == ATXN_FAILURE);
 }
 
@@ -322,8 +324,8 @@ void test_atxn_store() {
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
     struct arcp_region *rg1;
-    int r = atxn_load(handle1, &atxn1, &rg1);
-    if(r != 0) {
+    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg1 == region2);
@@ -335,7 +337,7 @@ void test_atxn_store() {
     ASSERT(!region3_destroyed);
     struct arcp_region *rg2;
     r = atxn_load(handle1, &atxn1, &rg2);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg2 == region3);
@@ -343,7 +345,7 @@ void test_atxn_store() {
     /* This store is not visible to other handles */
     struct arcp_region *rg3;
     r = atxn_load(handle2, &atxn1, &rg3);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg3 == region1);
@@ -377,22 +379,22 @@ void test_atxn_store() {
 void test_atxn_commit() {
     CHECKPOINT();
     struct arcp_region *rg1;
-    int r = atxn_load(handle1, &atxn1, &rg1);
-    if(r != 0) {
+    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg1 == region1);
     r = atxn_store(handle1, &atxn1, region3);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
     }
     struct arcp_region *rg2;
     r = atxn_load(handle2, &atxn1, &rg2);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
     r = atxn_store(handle2, &atxn2, region3);
-    if(r != 0) {
+    if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
     }
     ASSERT(atxn_commit(handle1) == ATXN_SUCCESS);

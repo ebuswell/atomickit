@@ -150,20 +150,20 @@ atxn_handle_t *atxn_start() {
     __ret;								\
 })
 
-int atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region) {
+enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region) {
     /* First see if we already have this */
     size_t i;
     /* Check update list */
     struct atxn_update *update_list = handle->update_list;
     IF_BSEARCH(update_list, handle->nupdates, txn, i) {
 	*region = arcp_load_weak(&update_list[i].stub->value);
-	return 0;
+	return ATXN_SUCCESS;
     } ENDIF_BSEARCH;
     /* Check check list */
     struct atxn_check *check_list = handle->check_list;
     IF_BSEARCH(check_list, handle->nchecks, txn, i) {
 	*region = check_list[i].value;
-	return 0;
+	return ATXN_SUCCESS;
     } ENDIF_BSEARCH;
     /* Couldn't find it. The above code has the side effect of finding
      * the place in check list where the new value ought to have been
@@ -177,25 +177,24 @@ int atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region) {
 	if(atxn_load_weak1(check_list[j].location) != check_list[j].value) {
 	    atomic_store_explicit(&handle->status, ATXN_FAILURE, memory_order_relaxed);
 	    atxn_release1(*region);
-	    return -1;
+	    return ATXN_FAILURE;
 	}
     }
     /* Realloc check_list and move old values to their appropriate locations */
     check_list = LISTINSERT(check_list, nchecks, i);
     if(check_list == NULL) {
 	atxn_release1(*region);
-	atomic_store_explicit(&handle->status, ATXN_ERROR, memory_order_relaxed);
-	return -1;
+	return ATXN_ERROR;
     }
     handle->check_list = check_list;
     handle->nchecks = nchecks + 1;
     /* Add a new check at i */
     check_list[i].location = txn;
     check_list[i].value = *region;
-    return 0;
+    return ATXN_SUCCESS;
 }
 
-int atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value) {
+enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value) {
     /* See if we've already set this previously */
     size_t nupdates = handle->nupdates;
     struct atxn_update *update_list = handle->update_list;
@@ -205,15 +204,14 @@ int atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value) {
 	size_t norphans = handle->norphans;
 	void **new_orphan_list = arealloc(handle->orphan_list, norphans * sizeof(void *), (norphans + 1) * sizeof(void *));
 	if(new_orphan_list == NULL) {
-	    atomic_store_explicit(&handle->status, ATXN_ERROR, memory_order_relaxed);
-	    return -1;
+	    return ATXN_ERROR;
 	}
 	new_orphan_list[norphans] = arcp_load(&update_list[i].stub->value);
 	handle->orphan_list = new_orphan_list;
 	handle->norphans = norphans + 1;
 	/* Update the stub with the new value */
 	arcp_store(&update_list[i].stub->value, value);
-	return 0;
+	return ATXN_SUCCESS;
     } ENDIF_BSEARCH;
     /* Couldn't find it. The above code has the side effect of finding
      * the place in update list where the new value ought to have been
@@ -221,22 +219,20 @@ int atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value) {
     /* Create a new stub */
     struct atxn_stub *stub = create_stub(NULL, value);
     if(stub == NULL) {
-	atomic_store_explicit(&handle->status, ATXN_ERROR, memory_order_relaxed);
-	return -1;
+	return ATXN_ERROR;
     }
 
     /* Add a new update at i */
     update_list = LISTINSERT(update_list, nupdates, i);
     if(update_list == NULL) {
 	arcp_release((struct arcp_region *) stub);
-	atomic_store_explicit(&handle->status, ATXN_ERROR, memory_order_relaxed);
-	return -1;
+	return ATXN_ERROR;
     }
     handle->update_list = update_list;
     update_list[i].location = txn;
     update_list[i].stub = stub;
     handle->nupdates = nupdates + 1;
-    return 0;
+    return ATXN_SUCCESS;
 }
 
 enum atxn_status atxn_commit(atxn_handle_t *handle) {
