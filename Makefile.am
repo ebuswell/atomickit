@@ -33,7 +33,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 nodist_pkgconfig_DATA = atomickit.pc
 
 check_PROGRAMS = unittest
-unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_rcp_h.c test/test_atomic_queue_h.c test/test_atomic_malloc_h.c test/test_atomic_txn_h.c
+unittest_SOURCES = test/main.c test/test.c test/test_atomic_h.c test/test_atomic_float_h.c test/test_atomic_pointer_h.c test/test_atomic_rcp_h.c test/test_atomic_queue_h.c test/test_atomic_malloc_h.c test/test_atomic_txn_h.c test/test_atomic_array_h.c
 unittest_LDADD = -latomickit
 unittest_LDFLAGS = $(LD_FLAGS) -rpath $(libdir)
 unittest_CFLAGS = $(CFLAGS) -O0 -g -Wall -Wextra -Iinclude -Iinclude/@HOST_ARCH_SRC@

@@ -41,12 +41,12 @@ struct aary *aary_new(size_t length) {
 }
 
 #define IF_BSEARCH(list, lower, nitems, value, retidx)	do {	\
-    (retidx) = lower;						\
-    size_t __l = lower;						\
+    (retidx) = (lower);						\
+    size_t __l = (retidx);					\
     size_t __u = (nitems);					\
     while(__l < __u) {						\
         (retidx) = (__l + __u) / 2;				\
-	struct arcp_region *__v = (list)[retidx];		\
+        struct arcp_region *__v = (list)[retidx];		\
 	if((value) < __v) {					\
 	    __u = (retidx);					\
 	} else if((value) > __v) {				\
@@ -123,7 +123,6 @@ struct aary *aary_remove(struct aary *array, size_t i) {
 
 struct aary *aary_dup_remove(struct aary *array, size_t i) {
     size_t length = array->length;
-    struct arcp_region *region = array->items[i];
     struct aary *new_array = amalloc(AARY_SIZE(length - 1));
     if(new_array == NULL) {
 	return NULL;
@@ -138,7 +137,6 @@ struct aary *aary_dup_remove(struct aary *array, size_t i) {
 	new_array->items[j] = array->items[j + 1];
     }
     new_array->length = length - 1;
-    arcp_release(region);
     arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
@@ -187,7 +185,6 @@ struct aary *aary_pop(struct aary *array) {
 
 struct aary *aary_dup_pop(struct aary *array) {
     size_t length = array->length;
-    struct arcp_region *region = array->items[length - 1];
     struct aary *new_array = amalloc(AARY_SIZE(length - 1));
     if(new_array == NULL) {
 	return NULL;
@@ -198,7 +195,6 @@ struct aary *aary_dup_pop(struct aary *array) {
 	new_array->items[j] = array->items[j];
     }
     new_array->length = length - 1;
-    arcp_release(region);
     arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
@@ -265,7 +261,6 @@ struct aary *aary_shift(struct aary *array) {
 
 struct aary *aary_dup_shift(struct aary *array) {
     size_t length = array->length;
-    struct arcp_region *region = array->items[0];
     struct aary *new_array = amalloc(AARY_SIZE(length - 1));
     if(new_array == NULL) {
 	return NULL;
@@ -276,15 +271,14 @@ struct aary *aary_dup_shift(struct aary *array) {
 	new_array->items[j - 1] = array->items[j];
     }
     new_array->length = length - 1;
-    arcp_release(region);
     arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
-int __aary_compar(const struct arcp_region *region1, const struct arcp_region *region2) {
-    if(region1 < region2) {
-	return -1;
-    } else if(region1 == region2) {
+static int __aary_comparx(const struct arcp_region **region1, const struct arcp_region **region2) {
+    if(*region1 < *region2) {
+ 	return -1;
+    } else if(*region1 == *region2) {
 	return 0;
     } else {
 	return 1;
@@ -292,11 +286,23 @@ int __aary_compar(const struct arcp_region *region1, const struct arcp_region *r
 }
 
 void aary_sortx(struct aary *array) {
-    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) __aary_compar);
+    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) __aary_comparx);
 }
 
-void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *), void *arg) {
-    qsort_r(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *, void *)) compar, arg);
+struct aary_sort_struct {
+    int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg);
+    void *arg;
+};
+
+static int __aary_compar(const struct arcp_region **region1, const struct arcp_region **region2, struct aary_sort_struct *sarg) {
+    return sarg->compar(*region1, *region2, sarg->arg);
+}
+
+void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg) {
+    struct aary_sort_struct sarg;
+    sarg.arg = arg;
+    sarg.compar = compar;
+    qsort_r(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *, void *)) __aary_compar, &sarg);
 }
 
 void aary_reverse(struct aary *array) {

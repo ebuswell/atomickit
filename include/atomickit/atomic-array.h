@@ -106,7 +106,7 @@ struct aary *aary_dup_prepend(struct aary *array, struct arcp_region *region);
 struct aary *aary_shift(struct aary *array);
 struct aary *aary_dup_shift(struct aary *array);
 void aary_sortx(struct aary *array);
-void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *), void *arg);
+void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg);
 void aary_reverse(struct aary *array);
 struct aary *aary_set_add(struct aary *array, struct arcp_region *region);
 struct aary *aary_dup_set_add(struct aary *array, struct arcp_region *region);
