@@ -101,6 +101,9 @@ struct aary *aary_dup_insert(struct aary *array, size_t i, struct arcp_region *r
 
 struct aary *aary_remove(struct aary *array, size_t i) {
     size_t length = array->length;
+    if(length - 1 == i) {
+	return aary_pop(array);
+    }
     struct arcp_region *region = array->items[i];
     struct arcp_region *last = array->items[length - 1];
     if(atryrealloc(array, AARY_SIZE(length), AARY_SIZE(length - 1))) {

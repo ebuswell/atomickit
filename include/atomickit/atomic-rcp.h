@@ -56,9 +56,9 @@ typedef struct {
  * threads above this threshold.
  */
 #ifdef __LP64__
-# define ARCP_ALIGN 16
-#else
 # define ARCP_ALIGN 8
+#else
+# define ARCP_ALIGN 4
 #endif
 
 struct arcp_region;
