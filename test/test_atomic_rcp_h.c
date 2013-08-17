@@ -1,5 +1,5 @@
 /*
- * test_atomic_txn_h.c
+ * test_atomic_rcp_h.c
  *
  * Copyright 2013 Evan Buswell
  *
@@ -38,20 +38,18 @@ void *alloca(size_t);
 #include "test.h"
 
 static struct {
-    char __attribute__((aligned(8))) string1[14];
-    char __attribute__((aligned(8))) string2[14];
-} ptrtest = { "Test String 1", "Test String 2" };
+    char string1[14];
+    char string2[14];
+} strtest = { "Test String 1", "Test String 2" };
 
 static bool region1_destroyed;
 static bool region2_destroyed;
 
 static void destroy_region1(struct arcp_region *region __attribute__((unused))) {
-    CHECKPOINT();
     region1_destroyed = true;
 }
 
 static void destroy_region2(struct arcp_region *region __attribute__((unused))) {
-    CHECKPOINT();
     region2_destroyed = true;
 }
 
@@ -65,18 +63,20 @@ static struct arcp_region *region2;
 static void test_arcp_uninit_fixture(void (*test)()) {
     region1_destroyed = false;
     region2_destroyed = false;
-    region1 = alloca(ARCP_REGION_OVERHEAD + 14);
-    region2 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
-    CHECKPOINT();
+    region1 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    region2 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    strcpy((char *) region1->data, strtest.string1);
+    strcpy((char *) region2->data, strtest.string2);
     test();
 }
 
 static void test_arcp_region_init() {
+    CHECKPOINT();
     arcp_region_init(region1, destroy_region1);
     ASSERT(region1->header.destroy == destroy_region1);
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 0);
     ASSERT(!region1_destroyed);
 }
 
@@ -85,35 +85,36 @@ static void test_arcp_region_init() {
 static void test_arcp_init_region_fixture(void (*test)()) {
     region1_destroyed = false;
     region2_destroyed = false;
-    region1 = alloca(ARCP_REGION_OVERHEAD + 14);
-    region2 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
+    region1 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    region2 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    strcpy((char *) region1->data, strtest.string1);
+    strcpy((char *) region2->data, strtest.string2);
     CHECKPOINT();
     arcp_region_init(region1, destroy_region1);
     CHECKPOINT();
     arcp_region_init(region2, destroy_region2);
-    CHECKPOINT();
     test();
 }
 
 static void test_arcp_init() {
     CHECKPOINT();
     arcp_init(&arcp, region1);
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
     ASSERT(!region1_destroyed);
     struct arcp_region *rg = arcp_load_weak(&arcp);
     ASSERT(rg == region1);
-    ASSERT(strcmp((char *) rg->data, ptrtest.string1) == 0);
 }
 
 static void test_arcp_incref() {
     CHECKPOINT();
-    arcp_incref(region1);
-    CHECKPOINT();
-    arcp_release(region1);
+    struct arcp_region *rg = arcp_incref(region1);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(arcp_refcount(region1) == 2);
+    ASSERT(arcp_ptrcount(region1) == 0);
     ASSERT(!region1_destroyed);
-    arcp_release(region1);
-    ASSERT(region1_destroyed);
 }
 
 /****************************/
@@ -121,10 +122,10 @@ static void test_arcp_incref() {
 static void test_arcp_init_fixture(void (*test)()) {
     region1_destroyed = false;
     region2_destroyed = false;
-    region1 = alloca(ARCP_REGION_OVERHEAD + 14);
-    region2 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
+    region1 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    region2 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    strcpy((char *) region1->data, strtest.string1);
+    strcpy((char *) region2->data, strtest.string2);
     CHECKPOINT();
     arcp_region_init(region1, destroy_region1);
     CHECKPOINT();
@@ -136,59 +137,96 @@ static void test_arcp_init_fixture(void (*test)()) {
 
 static void test_arcp_load() {
     CHECKPOINT();
-    struct arcp_region *rg1 = arcp_load(&arcp);
-    CHECKPOINT();
-    struct arcp_region *rg2 = arcp_load(&arcp);
-    ASSERT(!region1_destroyed);
-    ASSERT(rg1 == region1);
-    ASSERT(rg2 == region1);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
-    arcp_release(rg1);
-    CHECKPOINT();
-    arcp_release(rg2);
+    struct arcp_region *rg = arcp_load(&arcp);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(arcp_refcount(region1) == 2);
+    ASSERT(arcp_ptrcount(region1) == 1);
     ASSERT(!region1_destroyed);
 }
 
-#include <stdio.h>
-
 static void test_arcp_load_weak() {
     CHECKPOINT();
-    struct arcp_region *rg1 = arcp_load_weak(&arcp);
+    struct arcp_region *rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 1);
     ASSERT(!region1_destroyed);
-    ASSERT(rg1 == region1);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
-    arcp_release(region1);
-    ASSERT(!region1_destroyed);
-    arcp_store(&arcp, NULL);
-    ASSERT(region1_destroyed);
 }
 
 static void test_arcp_release() {
     arcp_release(region1);
+    ASSERT(arcp_refcount(region1) == 0);
+    ASSERT(arcp_ptrcount(region1) == 1);
     ASSERT(!region1_destroyed);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
     region1 = arcp_load(&arcp);
     CHECKPOINT();
     arcp_store(&arcp, NULL);
     CHECKPOINT();
     arcp_release(region1);
+    ASSERT(arcp_refcount(region1) == 0);
+    ASSERT(arcp_ptrcount(region1) == 0);
     ASSERT(region1_destroyed);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
 }
 
-static void test_arcp_compare_exchange() {
+static void test_arcp_compare_store() {
     /* succeed */
-    ASSERT(arcp_compare_exchange(&arcp, region1, region2));
+    ASSERT(arcp_compare_store(&arcp, region1, region2));
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 0);
+    ASSERT(arcp_refcount(region2) == 1);
+    ASSERT(arcp_ptrcount(region2) == 1);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
-    struct arcp_region *rg1 = arcp_load_weak(&arcp);
-    ASSERT(rg1 == region2);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    struct arcp_region *rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region2);
     /* fail */
-    ASSERT(!arcp_compare_exchange(&arcp, region1, region1));
+    ASSERT(!arcp_compare_store(&arcp, region1, region1));
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 0);
+    ASSERT(arcp_refcount(region2) == 1);
+    ASSERT(arcp_ptrcount(region2) == 1);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
-    rg1 = arcp_load_weak(&arcp);
-    ASSERT(rg1 == region2);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region2);
+}
+
+static void test_arcp_compare_store_release_succeed() {
+    /* succeed */
+    ASSERT(arcp_compare_store_release(&arcp, region1, region2));
+    ASSERT(arcp_refcount(region1) == 0);
+    ASSERT(arcp_ptrcount(region1) == 0);
+    ASSERT(arcp_refcount(region2) == 0);
+    ASSERT(arcp_ptrcount(region2) == 1);
+    ASSERT(region1_destroyed);
+    ASSERT(!region2_destroyed);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    struct arcp_region *rg = arcp_load(&arcp);
+    ASSERT(rg == region2);
+}
+
+static void test_arcp_compare_store_release_fail() {
+    /* fail */
+    ASSERT(!arcp_compare_store_release(&arcp, region2, region1));
+    ASSERT(arcp_refcount(region1) == 0);
+    ASSERT(arcp_ptrcount(region1) == 1);
+    ASSERT(arcp_refcount(region2) == 0);
+    ASSERT(arcp_ptrcount(region2) == 0);
+    ASSERT(!region1_destroyed);
+    ASSERT(region2_destroyed);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    struct arcp_region *rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region1);
 }
 
 static void test_arcp_store() {
@@ -196,11 +234,57 @@ static void test_arcp_store() {
     arcp_store(&arcp, region2);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 0);
+    ASSERT(arcp_refcount(region2) == 1);
+    ASSERT(arcp_ptrcount(region2) == 1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    struct arcp_region *rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region2);
     arcp_release(region2);
     CHECKPOINT();
     arcp_store(&arcp, region1);
     ASSERT(!region1_destroyed);
     ASSERT(region2_destroyed);
+    ASSERT(arcp_refcount(region1) == 1);
+    ASSERT(arcp_ptrcount(region1) == 1);
+    ASSERT(arcp_refcount(region2) == 0);
+    ASSERT(arcp_ptrcount(region2) == 0);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region1);
+}
+
+static void test_arcp_exchange() {
+    CHECKPOINT();
+    struct arcp_region *rg = arcp_exchange(&arcp, region2);
+    ASSERT(!region1_destroyed);
+    ASSERT(!region2_destroyed);
+    ASSERT(arcp_refcount(region1) == 2);
+    ASSERT(arcp_ptrcount(region1) == 0);
+    ASSERT(arcp_refcount(region2) == 1);
+    ASSERT(arcp_ptrcount(region2) == 1);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    ASSERT(rg == region1);
+    rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region2);
+    arcp_release(region2);
+    CHECKPOINT();
+    rg = arcp_exchange(&arcp, region1);
+    ASSERT(!region1_destroyed);
+    ASSERT(!region2_destroyed);
+    ASSERT(arcp_refcount(region1) == 2);
+    ASSERT(arcp_ptrcount(region1) == 1);
+    ASSERT(arcp_refcount(region2) == 1);
+    ASSERT(arcp_ptrcount(region2) == 0);
+    ASSERT(strcmp((char *) region1->data, strtest.string1) == 0);
+    ASSERT(strcmp((char *) region2->data, strtest.string2) == 0);
+    ASSERT(rg == region2);
+    rg = arcp_load_weak(&arcp);
+    ASSERT(rg == region1);
 }
 
 int run_atomic_rcp_h_test_suite() {
@@ -220,11 +304,13 @@ int run_atomic_rcp_h_test_suite() {
     }
 
     void (*arcp_init_tests[])() = { test_arcp_load, test_arcp_load_weak,
-				    test_arcp_compare_exchange, NULL,
-				    test_arcp_store, test_arcp_release, NULL };
+				    test_arcp_compare_store, test_arcp_compare_store_release_succeed,
+				    test_arcp_compare_store_release_fail,
+				    test_arcp_store, test_arcp_release, test_arcp_exchange, NULL };
     char *arcp_init_test_names[] = { "arcp_load", "arcp_load_weak",
-				     "arcp_compare_exchange", "arcp_compare_exchange_release",
-				     "arcp_store", "arcp_release", NULL };
+				     "arcp_compare_store", "arcp_compare_store_release_succeed",
+				     "arcp_compare_store_release_fail",
+				     "arcp_store", "arcp_release", "arcp_exchange", NULL };
     r = run_test_suite(test_arcp_init_fixture, arcp_init_test_names, arcp_init_tests);
     if(r != 0) {
 	return r;

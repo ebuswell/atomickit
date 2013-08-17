@@ -116,10 +116,12 @@ typedef struct {
 				     * transaction. */
     struct atxn_update *update_list; /** The list of updates for this
 				       * transaction. */
-    void **orphan_list; /** The list of orphaned updates for this
-			 * transaction. And orphaned update is kept to
-			 * secure the reference count until the
-			 * transaction is closed. */
+    struct arcp_region **orphan_list; /** The list of orphaned updates
+				       * for this transaction. And
+				       * orphaned update is kept to
+				       * secure the reference count
+				       * until the transaction is
+				       * closed. */
 } atxn_handle_t;
 
 /**
@@ -175,7 +177,6 @@ struct arcp_region *atxn_load_weak1(atxn_t *txn);
  *
  * @param ptr pointer to the memory region for a particular
  * transaction item.
- * 
  */
 static inline void atxn_release1(struct arcp_region *region) {
     arcp_release(region);
@@ -251,7 +252,7 @@ enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_regio
  * because of error or because the transaction semantics could not be
  * guaranteed.
  */
-enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, void *value);
+enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, struct arcp_region *value);
 
 /**
  * Commit and close the transaction, returning the resulting status.

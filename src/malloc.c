@@ -15,10 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
-#include <stdint.h>
 #include <string.h>
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -30,10 +31,10 @@
 /* These things look like simple parameters, but if you change them
  * beware the bit twiddling... */
 #define PAGE_SIZE 4096
-#define PAGE_CEIL(size) (((((size) - 1) >> 12) + 1) << 12)
+#define PAGE_SIZE_LOG2 12
 #define MIN_SIZE 16
 #define MIN_SIZE_LOG2 4
-#define NSIZES 8
+#define PAGE_CEIL(size) (((((size) - 1) >> PAGE_SIZE_LOG2) + 1) << PAGE_SIZE_LOG2)
 /* Reference counting is stored in the extra bits of the aligned pointers. */
 #define PTR_DECOUNT(ptr) ((void *) (((uintptr_t) (ptr)) & ~((uintptr_t) (MIN_SIZE - 1))))
 #define PTR_COUNT(ptr) (((uintptr_t) (ptr)) & ((uintptr_t) (MIN_SIZE - 1)))
@@ -48,6 +49,7 @@ struct fstack_item {
     volatile atomic_int refcount; /* Reference count. */
 };
 
+#define NSIZES 8
 /* The top-level free stack pointers for each size. */
 static volatile atomic_ptr glbl_fstack[NSIZES] = {
     ATOMIC_PTR_VAR_INIT(NULL) /* 16 */,  ATOMIC_PTR_VAR_INIT(NULL) /* 32 */,  ATOMIC_PTR_VAR_INIT(NULL) /* 64 */,   ATOMIC_PTR_VAR_INIT(NULL) /* 128 */,
@@ -71,45 +73,20 @@ static inline size_t bin2size(int bin) {
     return 1 << (bin + MIN_SIZE_LOG2);
 }
 
-/* Create a randomized, aligned pointer. */
-static inline void *randomptr() {
-    if(sizeof(void *) > 4) {
-	union {
-	    void *ptr;
-	    struct {
-		int32_t i1;
-		int32_t i2;
-	    } i;
-	} ret;
-	ret.i.i1 = mrand48();
-	ret.i.i2 = mrand48();
-	return PTR_DECOUNT(ret.ptr);
+static void am_perror(const char *msg) {
+    char buf[128];
+    strcpy(buf, msg);
+    strcpy(buf + strlen(buf), ": ");
+    if(strerror_r(errno, buf + strlen(buf), 128 - strlen(buf)) == 0) {
+	strcpy(buf + strlen(buf), "\n");
+	(void) write(STDERR_FILENO, buf, strlen(buf));
     } else {
-	union {
-	    void *ptr;
-	    int32_t i;
-	} ret;
-	ret.i = mrand48();
-	return PTR_DECOUNT(ret.ptr);
+	(void) write(STDERR_FILENO, msg, strlen(msg));
     }
 }
 
-#define am_perror(msg) do {						\
-	char buf[128];							\
-	const char *msgstart = msg ": ";				\
-	strcpy(buf, msgstart);						\
-	if(strerror_r(errno, buf + strlen(msgstart), 128 - strlen(msgstart)) == 0) { \
-	    strcpy(buf + strlen(buf), "\n");				\
-	    (void) write(STDERR_FILENO, buf, strlen(buf));		\
-	} else {							\
-	    const char *plainmsg = msg "\n";				\
-	    (void) write(STDERR_FILENO, plainmsg, strlen(plainmsg));	\
-	}								\
-    } while(0)
-
-
 /* Allocate pages directly from the OS. Uses mmap. */
-static inline void *os_alloc(size_t size) {
+static void *os_alloc(size_t size) {
     void *ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(ptr == MAP_FAILED) {
 	return NULL;
@@ -120,13 +97,13 @@ static inline void *os_alloc(size_t size) {
 
 /* Free pages directly to the OS. Uses munmap. Note that currently
  * fragmented pages are never freed. */
-static inline void os_free(void *ptr, size_t size) {
+static void os_free(void *ptr, size_t size) {
     if(munmap(ptr, PAGE_CEIL(size)) != 0) {
-	am_perror("afree() failed at munmap; MEMORY IS LEAKING");
+	am_perror("afree() failed at munmap; MEMORY MAY BE LEAKING");
     }
 }
 
-static inline bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsize, size_t newsize) {
+static bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsize, size_t newsize) {
     size_t c_oldsize = PAGE_CEIL(oldsize);
     size_t c_newsize = PAGE_CEIL(newsize);
     if(c_oldsize == c_newsize) {
@@ -134,7 +111,7 @@ static inline bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsi
     } else if(c_oldsize > c_newsize) {
 	ptr += c_newsize;
 	if(munmap(ptr, c_oldsize - c_newsize) != 0) {
-	    am_perror("atryrealloc() failed at munmap;");
+	    am_perror("atryrealloc() failed at munmap");
 	    return false;
 	}
 	return true;
@@ -143,7 +120,7 @@ static inline bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsi
 }
 
 /* Reallocate a memory region directly from the OS. */
-static inline void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
+static void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
     size_t c_oldsize = PAGE_CEIL(oldsize);
     size_t c_newsize = PAGE_CEIL(newsize);
     if(c_oldsize == c_newsize) {
@@ -165,210 +142,244 @@ static inline void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
     int r = munmap(ptr, c_oldsize);
     if(r != 0) {
 	if(munmap(ret, c_newsize) != 0) {
-	    am_perror("atryrealloc() failed in munmap error routine; MEMORY IS LEAKING");
+	    am_perror("arealloc() failed in munmap error routine; MEMORY IS LEAKING");
 	}
 	return NULL;
     }
     return ret;
-}
-
-/* Atomically pop a memory region of the specified size off the
- * stack. Returns NULL if the stack for that memory region is empty. */
-static inline void *fstack_pop(int bin) {
-    for(;;) {
-	/* Acquire the top of the stack and update its reference
-	 * count. */
-	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
-	do {
-	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
-		/* Spinlock if too many threads are accessing this at once. */
-		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
-	    }
-	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
-								    memory_order_acq_rel, memory_order_acquire)));
-	next += 1;
-	if(PTR_DECOUNT(next) == NULL) {
-	    /* The stack is currently empty; get rid of the reference
-	     * count we just added to the NULL pointer. */
-	    do {
-		if(likely(atomic_ptr_compare_exchange_weak_explicit(
-			      &glbl_fstack[bin], &next, NULL,
-			      memory_order_acq_rel, memory_order_relaxed)
-			  || next == NULL)) {
-		    /* Empty stack. */
-		    return NULL;
-		}
-	    } while(PTR_DECOUNT(next) == NULL);
-	    /* Something was added while we were trying to update; try
-	     * again. */
-	    continue;
-	}
-	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next);
-	/* Try to pop the item off the top of the stack. */
-	do {
-	    if(likely(atomic_ptr_compare_exchange_weak_explicit(
-			  &glbl_fstack[bin], &next, item->next,
-			  memory_order_acq_rel, memory_order_relaxed))) {
-		/* Transfer count. */
-		atomic_fetch_add_explicit(&item->refcount, PTR_COUNT(next),
-					  memory_order_acq_rel);
-		break;
-	    }
-	} while(PTR_DECOUNT(next) == item);
-	/* The item is no longer the top of the stack, because someone
-	 * successfully popped it. Release reference. If the refcount
-	 * hasn't been transferred yet, then refcount will go negative
-	 * instead of zero. */
-	if(likely((atomic_fetch_sub(&item->refcount, 1) - 1) == 0)) {
-	    /* We are the last to hold a reference to this item. As no
-	     * one else can claim it; return it. */
-	    return (void *) item;
-	}
-	/* References to the item remain. Someone else will return it,
-	 * or push will add it back to the stack. Loop and try
-	 * again. */
-    }
-}
-
-static void fstack_push(int bin, void *ptr) {
-    struct fstack_item *new_item = (struct fstack_item *) ptr;
-    /* Set the initial refcount to zero. */
-    atomic_init(&new_item->refcount, 0);
-    for(;;) {
-	/* Get the top of the stack; we have to update reference count
-	 * since we act like pop if there's more than our own
-	 * reference count. */
-	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
-	do {
-	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
-		/* Spinlock if too many threads are accessing this at once. */
-		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
-	    }
-	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
-								    memory_order_acq_rel, memory_order_acquire)));
-	next += 1;
-	if(PTR_DECOUNT(next) == NULL) {
-	    /* This is the only item that will be on the stack. */
-	    new_item->next = NULL;
-	    do {
-		if(likely(atomic_ptr_compare_exchange_weak_explicit(
-			      &glbl_fstack[bin], &next, ptr,
-			      memory_order_seq_cst, memory_order_acquire))) {
-		    /* Success! */
-		    return;
-		}
-	    } while(PTR_DECOUNT(next) == NULL);
-	    /* Something else was added before we could add this; try again. */
-	    continue;
-	}
-	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next);
-	if(likely(PTR_COUNT(next) == 1)) {
-	    new_item->next = PTR_DECOUNT(next);
-	    /* Try to push the item on to the top of the stack. */
-	    if(likely(atomic_ptr_compare_exchange_weak_explicit(
-			  &glbl_fstack[bin], &next, new_item,
-			  memory_order_seq_cst, memory_order_acquire))) {
-		/* Success! */
-		return;
-	    }
-	}
-	/* Someone's trying to pop this item, or someone else is
-	 * trying to push to it, too. Because we can't distinguish
-	 * this situation, just help pop the item. */
-	while(PTR_DECOUNT(next) == item) {
-	    if(atomic_ptr_compare_exchange_weak_explicit(
-		   &glbl_fstack[bin], &next, item->next,
-		   memory_order_acq_rel, memory_order_acquire)) {
-		/* Transfer count. */
-		atomic_fetch_add(&item->refcount, PTR_COUNT(next));
-		break;
-	    }
-	}
-	/* The item is no longer the top of the stack, because someone
-	 * successfully popped it. Release reference. If the refcount
-	 * hasn't been transferred yet, then refcount will go negative
-	 * instead of zero. */
-	if((atomic_fetch_sub(&item->refcount, 1) - 1) == 0) {
-	    /* We are the last to hold a reference to this item. But
-	     * we don't want it, so push this one, too. This is one of
-	     * the more inelegant things about this algorithm... */
-	    fstack_push(bin, item);
-	}
-	/* Loop and try again. */
-    }
 }
 
 void *amalloc(size_t size) {
     if(size == 0) {
-	return randomptr();
-    }
-    if(size > 2048) {
-	return os_alloc(size);
-    }
-    void *ret;
-    int bin = size2bin(size);
-    int i;
-    for(i = bin; i < NSIZES; i++) {
-	if((ret = fstack_pop(i)) != NULL) {
-	    goto breakdown_chunk;
-	}
-    }
-    /* allocate a new chunk */
-    ret = os_alloc(PAGE_SIZE);
-    if(ret == NULL) {
 	return NULL;
     }
-    /* i = NSIZES; -- already nsizes from for loop above */
-breakdown_chunk:
-    while(i > bin) {
-	i--;
-	fstack_push(i, ret + bin2size(i));
-    }
-    return ret;
+    return os_alloc(size);
 }
 
 void afree(void *ptr, size_t size) {
     if(size == 0) {
 	return;
-    } else if(size > 2048) {
-	os_free(ptr, size);
-    } else {
-	fstack_push(size2bin(size), ptr);
     }
-}
-
-bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
-    if(oldsize > 2048 && newsize > 2048) {
-	return os_tryrealloc(ptr, oldsize, newsize);
-    } else if(oldsize == 0 && newsize == 0) {
-	return true;
-    } else if(size2bin(oldsize) == size2bin(newsize)) {
-	return true;
-    } else {
-	return false;
-    }
+    os_free(ptr, size);
 }
 
 void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
     if(oldsize == 0) {
-	if(newsize == 0) {
-	    return ptr;
-	}
 	return amalloc(newsize);
     } else if(newsize == 0) {
-	afree(ptr, oldsize);
-	return randomptr();
-    }
-    if(oldsize > 2048 && newsize > 2048) {
-	return os_realloc(ptr, oldsize, newsize);
-    } else if(size2bin(oldsize) == size2bin(newsize)) {
+	os_free(ptr, oldsize);
 	return ptr;
     }
-    void *ret = amalloc(newsize);
-    if(ret == NULL) {
-	return NULL;
-    }
-    memcpy(ret, ptr, oldsize > newsize ? newsize : oldsize);
-    afree(ptr, oldsize);
-    return ret;
+    return os_realloc(ptr, oldsize, newsize);
 }
+
+bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
+    if(oldsize == 0) {
+	return newsize == 0;
+    } else if(newsize == 0) {
+	os_free(ptr, oldsize);
+	return true;
+    }
+    return os_tryrealloc(ptr, oldsize, newsize);
+}
+
+/* /\* Atomically pop a memory region of the specified size off the */
+/*  * stack. Returns NULL if the stack for that memory region is empty. *\/ */
+/* static inline void *fstack_pop(int bin) { */
+/*     for(;;) { */
+/* 	/\* Acquire the top of the stack and update its reference */
+/* 	 * count. *\/ */
+/* 	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire); */
+/* 	do { */
+/* 	    while(PTR_COUNT(next) == MIN_SIZE - 1) { */
+/* 		/\* Spinlock if too many threads are accessing this at once. *\/ */
+/* 		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire); */
+/* 	    } */
+/* 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1, */
+/* 								    memory_order_acq_rel, memory_order_acquire))); */
+/* 	next += 1; */
+/* 	if(PTR_DECOUNT(next) == NULL) { */
+/* 	    /\* The stack is currently empty; get rid of the reference */
+/* 	     * count we just added to the NULL pointer. *\/ */
+/* 	    do { */
+/* 		if(likely(atomic_ptr_compare_exchange_weak_explicit( */
+/* 			      &glbl_fstack[bin], &next, NULL, */
+/* 			      memory_order_acq_rel, memory_order_relaxed) */
+/* 			  || next == NULL)) { */
+/* 		    /\* Empty stack. *\/ */
+/* 		    return NULL; */
+/* 		} */
+/* 	    } while(PTR_DECOUNT(next) == NULL); */
+/* 	    /\* Something was added while we were trying to update; try */
+/* 	     * again. *\/ */
+/* 	    continue; */
+/* 	} */
+/* 	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next); */
+/* 	/\* Try to pop the item off the top of the stack. *\/ */
+/* 	do { */
+/* 	    if(likely(atomic_ptr_compare_exchange_weak_explicit( */
+/* 			  &glbl_fstack[bin], &next, item->next, */
+/* 			  memory_order_acq_rel, memory_order_relaxed))) { */
+/* 		/\* Transfer count. *\/ */
+/* 		atomic_fetch_add_explicit(&item->refcount, PTR_COUNT(next), */
+/* 					  memory_order_acq_rel); */
+/* 		break; */
+/* 	    } */
+/* 	} while(PTR_DECOUNT(next) == item); */
+/* 	/\* The item is no longer the top of the stack, because someone */
+/* 	 * successfully popped it. Release reference. If the refcount */
+/* 	 * hasn't been transferred yet, then refcount will go negative */
+/* 	 * instead of zero. *\/ */
+/* 	if(likely((atomic_fetch_sub(&item->refcount, 1) - 1) == 0)) { */
+/* 	    /\* We are the last to hold a reference to this item. As no */
+/* 	     * one else can claim it; return it. *\/ */
+/* 	    return (void *) item; */
+/* 	} */
+/* 	/\* References to the item remain. Someone else will return it, */
+/* 	 * or push will add it back to the stack. Loop and try */
+/* 	 * again. *\/ */
+/*     } */
+/* } */
+
+/* static void fstack_push(int bin, void *ptr) { */
+/*     struct fstack_item *new_item = (struct fstack_item *) ptr; */
+/*     /\* Set the initial refcount to zero. *\/ */
+/*     atomic_init(&new_item->refcount, 0); */
+/*     for(;;) { */
+/* 	/\* Get the top of the stack; we have to update reference count */
+/* 	 * since we act like pop if there's more than our own */
+/* 	 * reference count. *\/ */
+/* 	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire); */
+/* 	do { */
+/* 	    while(PTR_COUNT(next) == MIN_SIZE - 1) { */
+/* 		/\* Spinlock if too many threads are accessing this at once. *\/ */
+/* 		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire); */
+/* 	    } */
+/* 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1, */
+/* 								    memory_order_acq_rel, memory_order_acquire))); */
+/* 	next += 1; */
+/* 	if(PTR_DECOUNT(next) == NULL) { */
+/* 	    /\* This is the only item that will be on the stack. *\/ */
+/* 	    new_item->next = NULL; */
+/* 	    do { */
+/* 		if(likely(atomic_ptr_compare_exchange_weak_explicit( */
+/* 			      &glbl_fstack[bin], &next, ptr, */
+/* 			      memory_order_seq_cst, memory_order_acquire))) { */
+/* 		    /\* Success! *\/ */
+/* 		    return; */
+/* 		} */
+/* 	    } while(PTR_DECOUNT(next) == NULL); */
+/* 	    /\* Something else was added before we could add this; try again. *\/ */
+/* 	    continue; */
+/* 	} */
+/* 	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next); */
+/* 	if(likely(PTR_COUNT(next) == 1)) { */
+/* 	    new_item->next = PTR_DECOUNT(next); */
+/* 	    /\* Try to push the item on to the top of the stack. *\/ */
+/* 	    if(likely(atomic_ptr_compare_exchange_weak_explicit( */
+/* 			  &glbl_fstack[bin], &next, new_item, */
+/* 			  memory_order_seq_cst, memory_order_acquire))) { */
+/* 		/\* Success! *\/ */
+/* 		return; */
+/* 	    } */
+/* 	} */
+/* 	/\* Someone's trying to pop this item, or someone else is */
+/* 	 * trying to push to it, too. Because we can't distinguish */
+/* 	 * this situation, just help pop the item. *\/ */
+/* 	while(PTR_DECOUNT(next) == item) { */
+/* 	    if(atomic_ptr_compare_exchange_weak_explicit( */
+/* 		   &glbl_fstack[bin], &next, item->next, */
+/* 		   memory_order_acq_rel, memory_order_acquire)) { */
+/* 		/\* Transfer count. *\/ */
+/* 		atomic_fetch_add(&item->refcount, PTR_COUNT(next)); */
+/* 		break; */
+/* 	    } */
+/* 	} */
+/* 	/\* The item is no longer the top of the stack, because someone */
+/* 	 * successfully popped it. Release reference. If the refcount */
+/* 	 * hasn't been transferred yet, then refcount will go negative */
+/* 	 * instead of zero. *\/ */
+/* 	if((atomic_fetch_sub(&item->refcount, 1) - 1) == 0) { */
+/* 	    /\* We are the last to hold a reference to this item. But */
+/* 	     * we don't want it, so push this one, too. This is one of */
+/* 	     * the more inelegant things about this algorithm... *\/ */
+/* 	    fstack_push(bin, item); */
+/* 	} */
+/* 	/\* Loop and try again. *\/ */
+/*     } */
+/* } */
+
+/* void *amalloc(size_t size) { */
+/*     if(size == 0) { */
+/* 	return randomptr(); */
+/*     } */
+/*     if(size > 2048) { */
+/* 	return os_alloc(size); */
+/*     } */
+/*     void *ret; */
+/*     int bin = size2bin(size); */
+/*     int i; */
+/*     for(i = bin; i < NSIZES; i++) { */
+/* 	if((ret = fstack_pop(i)) != NULL) { */
+/* 	    goto breakdown_chunk; */
+/* 	} */
+/*     } */
+/*     /\* allocate a new chunk *\/ */
+/*     ret = os_alloc(PAGE_SIZE); */
+/*     if(ret == NULL) { */
+/* 	return NULL; */
+/*     } */
+/*     /\* i = NSIZES; -- already nsizes from for loop above *\/ */
+/* breakdown_chunk: */
+/*     while(i > bin) { */
+/* 	i--; */
+/* 	fstack_push(i, ret + bin2size(i)); */
+/*     } */
+/*     return ret; */
+/* } */
+
+/* void afree(void *ptr, size_t size) { */
+/*     if(size == 0) { */
+/* 	return; */
+/*     } else if(size > 2048) { */
+/* 	os_free(ptr, size); */
+/*     } else { */
+/* 	fstack_push(size2bin(size), ptr); */
+/*     } */
+/* } */
+
+/* bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) { */
+/*     if(oldsize > 2048 && newsize > 2048) { */
+/* 	return os_tryrealloc(ptr, oldsize, newsize); */
+/*     } else if(oldsize == 0 && newsize == 0) { */
+/* 	return true; */
+/*     } else if(size2bin(oldsize) == size2bin(newsize)) { */
+/* 	return true; */
+/*     } else { */
+/* 	return false; */
+/*     } */
+/* } */
+
+/* void *arealloc(void *ptr, size_t oldsize, size_t newsize) { */
+/*     if(oldsize == 0) { */
+/* 	if(newsize == 0) { */
+/* 	    return ptr; */
+/* 	} */
+/* 	return amalloc(newsize); */
+/*     } else if(newsize == 0) { */
+/* 	afree(ptr, oldsize); */
+/* 	return randomptr(); */
+/*     } */
+/*     if(oldsize > 2048 && newsize > 2048) { */
+/* 	return os_realloc(ptr, oldsize, newsize); */
+/*     } else if(size2bin(oldsize) == size2bin(newsize)) { */
+/* 	return ptr; */
+/*     } */
+/*     void *ret = amalloc(newsize); */
+/*     if(ret == NULL) { */
+/* 	return NULL; */
+/*     } */
+/*     memcpy(ret, ptr, oldsize > newsize ? newsize : oldsize); */
+/*     afree(ptr, oldsize); */
+/*     return ret; */
+/* } */

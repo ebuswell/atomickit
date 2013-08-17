@@ -32,10 +32,11 @@
 #ifndef ATOMICKIT_ATOMIC_RCP_H
 #define ATOMICKIT_ATOMIC_RCP_H 1
 
-#include <atomickit/atomic-pointer.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <atomickit/atomic.h>
+#include <atomickit/atomic-pointer.h>
 
 /**
  * Atomic Reference Counted Pointer
@@ -98,7 +99,7 @@ struct arcp_region {
 #define ARCP_REGION_OVERHEAD (offsetof(struct arcp_region, data))
 
 /* The mask for the transaction count. */
-#define ARCP_COUNTMASK ((intptr_t) (ARCP_ALIGN - 1))
+#define ARCP_COUNTMASK ((uintptr_t) (ARCP_ALIGN - 1))
 
 /* Gets the count for a given pointer. */
 #define ARCP_PTR2COUNT(ptr) (((uintptr_t) (ptr)) & ARCP_COUNTMASK)
@@ -233,10 +234,11 @@ static inline int arcp_ptrcount(struct arcp_region *region) {
  *
  * @param region the region whose reference count should be incremented.
  */
-static inline void arcp_incref(struct arcp_region *region) {
+static inline struct arcp_region *arcp_incref(struct arcp_region *region) {
     if(region != NULL) {
 	__arcp_urefs(region, 0, 1);
     }
+    return region;
 }
 
 /**
@@ -310,6 +312,7 @@ static inline struct arcp_region *arcp_load(arcp_t *rcp) {
     do {
 	while(unlikely(ARCP_PTR2COUNT(ptr) == ARCP_ALIGN - 1)) {
 	    /* Spinlock if too many threads are accessing this at once. */
+	    cpu_relax();
 	    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr + 1,
@@ -320,11 +323,12 @@ static inline struct arcp_region *arcp_load(arcp_t *rcp) {
     if(ret != NULL) {
 	__arcp_urefs(ret, 0, 1);
     }
-    /* We have two references, try and remove the one from the pointer. */
+    /* We have two references, try and remove the one stored on the pointer. */
     while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr - 1,
 							      memory_order_acq_rel, memory_order_acquire))) {
 	/* Is the pointer still valid? */
-	if(ARCP_PTRDECOUNT(ptr) != ret) {
+	if((ARCP_PTRDECOUNT(ptr) != ret)
+	   || (ARCP_PTR2COUNT(ptr) == 0)) { /* The second test will prevent a/b/a errors */
 	    /* Somebody else has transferred / will transfer the
 	     * count. */
 	    if(ret != NULL) {
@@ -378,7 +382,7 @@ static inline struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region 
  * Compare the content of the reference counted pointer with
  * `oldregion`, and if equal set its content to `newregion`.
  *
- * Only suceeds if `oldregion` is still the content of the
+ * Only succeeds if `oldregion` is still the content of the
  * transaction. The caller's references are untouched, so call
  * `arcp_region_release()` on oldregion and/or newregion if you no
  * longer intend to reference them. Note that the semantics of
@@ -392,11 +396,11 @@ static inline struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region 
  *
  * @returns true if set to newregion, false otherwise.
  */
-static inline bool arcp_compare_exchange(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
-    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+static inline bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
     if(newregion != NULL) {
 	__arcp_urefs(newregion, 1, 0);
     }
+    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
 	if(ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */
@@ -416,11 +420,11 @@ static inline bool arcp_compare_exchange(arcp_t *rcp, struct arcp_region *oldreg
     return true;
 }
 
-static inline bool arcp_compare_exchange_release(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
-    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+static inline bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
     if(newregion != NULL) {
 	__arcp_urefs(newregion, 1, -1);
     }
+    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
 	if(ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */

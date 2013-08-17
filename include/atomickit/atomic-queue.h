@@ -104,9 +104,9 @@ static inline int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
 	tail = (struct aqueue_node *) arcp_load(&aqueue->tail);
 	next = (struct aqueue_node *) arcp_load(&tail->next);
 	if(unlikely(next != NULL)) {
-	    arcp_compare_exchange_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
-	} else if(likely(arcp_compare_exchange(&tail->next, NULL, (struct arcp_region *) node))) {
-	    arcp_compare_exchange_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
+	    arcp_compare_store_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
+	} else if(likely(arcp_compare_store(&tail->next, NULL, (struct arcp_region *) node))) {
+	    arcp_compare_store_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
 	    return 0;
 	} else {
 	    arcp_release((struct arcp_region *) tail);
@@ -132,7 +132,7 @@ static inline struct arcp_region *aqueue_deq(aqueue_t *aqueue) {
 	    arcp_release((struct arcp_region *) head);
 	    return NULL;
 	}
-	if(likely(arcp_compare_exchange(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	if(likely(arcp_compare_store(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
 	    struct arcp_region *item = arcp_exchange(&next->item, NULL);
 	    arcp_release((struct arcp_region *) next);
 	    arcp_release((struct arcp_region *) head);
@@ -215,7 +215,7 @@ static inline bool aqueue_compare_deq(aqueue_t *aqueue, struct arcp_region *item
 	    arcp_release((struct arcp_region *) head);
 	    return false;
 	}
-	if(likely(arcp_compare_exchange(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	if(likely(arcp_compare_store(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
 	    arcp_store(&next->item, NULL);
 	    arcp_release((struct arcp_region *) next);
 	    arcp_release((struct arcp_region *) head);

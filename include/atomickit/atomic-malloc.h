@@ -76,4 +76,15 @@ void afree(void *ptr, size_t size);
  */
 void *arealloc(void *ptr, size_t oldsize, size_t newsize);
 
+/**
+ * Resize a region previously allocated with `amalloc()` if it can be
+ * done in place.
+ *
+ * @param ptr a pointer to the memory region to be resized.
+ * @param oldsize the currently allocated size of the memory region.
+ * @param newsize the desired size of the memory region.
+ *
+ * @returns true if the memory region was resized, false if it could
+ * not be resized in place.
+ */
 bool atryrealloc(void *ptr, size_t oldsize, size_t newsize);
