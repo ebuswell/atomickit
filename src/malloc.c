@@ -87,7 +87,7 @@ static void am_perror(const char *msg) {
 
 /* Allocate pages directly from the OS. Uses mmap. */
 static void *os_alloc(size_t size) {
-    void *ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void *ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(ptr == MAP_FAILED) {
 	return NULL;
     } else {
@@ -134,7 +134,7 @@ static void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
 	return ptr;
     }
     /* Otherwise we're growing the region. */
-    void *ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void *ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(ret == MAP_FAILED) {
 	return NULL;
     }
