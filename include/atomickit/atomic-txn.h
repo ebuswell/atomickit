@@ -47,7 +47,7 @@ typedef struct {
  * the shift of multiple transactional locations.
  */
 struct atxn_stub {
-    struct arcp_region_header header;
+    struct arcp_region;
     atomic_uint clock; /** The clock value at which this stub was
 			* created. */
     arcp_t prev; /** The previous value. */
@@ -98,8 +98,8 @@ enum atxn_status {
  * the transaction is closed, either by aborting (`atxn_abort`) or by
  * committing (`atxn_commit`).
  */
-typedef struct {
-    struct arcp_region_header header;
+struct atxn_handle {
+    struct arcp_region;
     volatile atomic_ulong procstatus; /** The processing status for this transaction. */
     volatile atomic_uint clock; /** The clock value at which this
 				 * transaction is being processed. */
@@ -122,7 +122,7 @@ typedef struct {
 				       * secure the reference count
 				       * until the transaction is
 				       * closed. */
-} atxn_handle_t;
+};
 
 /**
  * Initialize a transaction container.
@@ -187,7 +187,7 @@ static inline void atxn_release1(struct arcp_region *region) {
  *
  * @returns a pointer to the transaction handle.
  */
-atxn_handle_t *atxn_start(void);
+struct atxn_handle *atxn_start(void);
 
 /**
  * Abort and close a transaction, releasing all acquired values.
@@ -195,8 +195,8 @@ atxn_handle_t *atxn_start(void);
  * @param handle a pointer to the handle of the transaction to abort
  * and close.
  */
-static inline void atxn_abort(atxn_handle_t *handle) {
-    arcp_release((struct arcp_region *) handle);
+static inline void atxn_abort(struct atxn_handle *handle) {
+    arcp_release(handle);
 }
 
 /**
@@ -209,7 +209,7 @@ static inline void atxn_abort(atxn_handle_t *handle) {
  * @param handle a pointer to the handle of the transaction to get the
  * status of.
  */
-static inline enum atxn_status atxn_status(atxn_handle_t *handle) {
+static inline enum atxn_status atxn_status(struct atxn_handle *handle) {
     return (enum atxn_status) atomic_load_explicit(&handle->status, memory_order_acquire);
 }
 
@@ -237,7 +237,7 @@ static inline enum atxn_status atxn_status(atxn_handle_t *handle) {
  * because of error or because the transaction semantics could not be
  * guaranteed.
  */
-enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region);
+enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_region **region);
 
 /**
  *
@@ -252,7 +252,7 @@ enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_regio
  * because of error or because the transaction semantics could not be
  * guaranteed.
  */
-enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, struct arcp_region *value);
+enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp_region *value);
 
 /**
  * Commit and close the transaction, returning the resulting status.
@@ -261,6 +261,6 @@ enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, struct arcp_regi
  *
  * @returns the final status of the transaction.
  */
-enum atxn_status atxn_commit(atxn_handle_t *handle);
+enum atxn_status atxn_commit(struct atxn_handle *handle);
 
 #endif /* ! ATOMICKIT_ATOMIC_TXN_H */

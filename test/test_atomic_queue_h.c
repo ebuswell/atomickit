@@ -78,8 +78,8 @@ static void test_aqueue_init_fixture(void (*test)()) {
     region2_destroyed = false;
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
     region2 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
+    strcpy((char *) ARCP_REGION2DATA(region1), ptrtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     int r = aqueue_init(&aqueue);
@@ -109,8 +109,8 @@ static void test_aqueue_enq() {
     CHECKPOINT();
     region2 = aqueue_deq(&aqueue);
     CHECKPOINT();
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
-    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), ptrtest.string2) == 0);
 }
 
 /****************************/
@@ -120,8 +120,8 @@ static void test_aqueue_full_fixture(void (*test)()) {
     region2_destroyed = false;
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
     region2 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
+    strcpy((char *) ARCP_REGION2DATA(region1), ptrtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     int r = aqueue_init(&aqueue);
@@ -155,9 +155,9 @@ static void test_aqueue_deq() {
     CHECKPOINT();
     region1 = aqueue_deq(&aqueue);
     ASSERT(!region1_destroyed);
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
     region2 = aqueue_deq(&aqueue);
-    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), ptrtest.string2) == 0);
     ASSERT(!region2_destroyed);
     void *nope = aqueue_deq(&aqueue);
     ASSERT(nope == NULL);
@@ -168,15 +168,15 @@ static void test_aqueue_compare_deq() {
     arcp_release(region2);
     ASSERT(aqueue_compare_deq(&aqueue, region1));
     ASSERT(!region1_destroyed);
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
     region2 = aqueue_peek(&aqueue);
-    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), ptrtest.string2) == 0);
     arcp_release(region2);
     ASSERT(!aqueue_compare_deq(&aqueue, region1));
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
     region2 = aqueue_peek(&aqueue);
-    ASSERT(strcmp((char *) region2->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), ptrtest.string2) == 0);
     arcp_release(region2);
     ASSERT(!region2_destroyed);
     ASSERT(aqueue_compare_deq(&aqueue, region2));
@@ -192,12 +192,12 @@ static void test_aqueue_peek() {
     CHECKPOINT();
     region1 = aqueue_peek(&aqueue);
     ASSERT(!region1_destroyed);
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
     arcp_release(region1);
     CHECKPOINT();
     struct arcp_region *region1_2 = aqueue_peek(&aqueue);
     ASSERT(!region1_destroyed);
-    ASSERT(strcmp((char *) region1_2->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1_2), ptrtest.string1) == 0);
     arcp_release(region1_2);
     CHECKPOINT();
     if(!aqueue_compare_deq(&aqueue, region1)) {

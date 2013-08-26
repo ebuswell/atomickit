@@ -38,7 +38,7 @@
  * Queue node
  */
 struct aqueue_node {
-    struct arcp_region_header header;
+    struct arcp_region;
     arcp_t next; /** the next item in the queue */
     arcp_t item; /** the content of this node */
 };
@@ -53,7 +53,7 @@ typedef struct {
 
 void __aqueue_node_destroy(struct aqueue_node *node);
 
-#define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item) { ARCP_REGION_HEADER_VAR_INIT(ptrcount, refcount, NULL), ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
+#define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item) { ARCP_REGION_VAR_INIT(ptrcount, refcount, NULL), ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
 
 #define AQUEUE_SENTINEL_VAR_INIT(ptrcount, refcount, next) AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, NULL)
 
@@ -72,11 +72,11 @@ static inline int aqueue_init(aqueue_t *aqueue) {
 	return -1;
     }
     arcp_init(&sentinel->next, NULL);
-    arcp_region_init((struct arcp_region *) sentinel, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
+    arcp_region_init(sentinel, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
 
-    arcp_init(&aqueue->head, (struct arcp_region *) sentinel);
-    arcp_init(&aqueue->tail, (struct arcp_region *) sentinel);
-    arcp_release((struct arcp_region *) sentinel);
+    arcp_init(&aqueue->head, sentinel);
+    arcp_init(&aqueue->tail, sentinel);
+    arcp_release(sentinel);
     return 0;
 }
 
@@ -96,7 +96,7 @@ static inline int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
     }
     arcp_init(&node->item, item);
     arcp_init(&node->next, NULL);
-    arcp_region_init((struct arcp_region *) node, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
+    arcp_region_init(node, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
 
     struct aqueue_node *tail;
     struct aqueue_node *next;
@@ -104,12 +104,12 @@ static inline int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
 	tail = (struct aqueue_node *) arcp_load(&aqueue->tail);
 	next = (struct aqueue_node *) arcp_load(&tail->next);
 	if(unlikely(next != NULL)) {
-	    arcp_compare_store_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) next);
-	} else if(likely(arcp_compare_store(&tail->next, NULL, (struct arcp_region *) node))) {
-	    arcp_compare_store_release(&aqueue->tail, (struct arcp_region *) tail, (struct arcp_region *) node);
+	    arcp_compare_store_release(&aqueue->tail, tail, next);
+	} else if(likely(arcp_compare_store(&tail->next, NULL, node))) {
+	    arcp_compare_store_release(&aqueue->tail, tail, node);
 	    return 0;
 	} else {
-	    arcp_release((struct arcp_region *) tail);
+	    arcp_release(tail);
 	}
     }
 }
@@ -129,17 +129,17 @@ static inline struct arcp_region *aqueue_deq(aqueue_t *aqueue) {
 	head = (struct aqueue_node *) arcp_load(&aqueue->head);
 	next = (struct aqueue_node *) arcp_load(&head->next);
 	if(next == NULL) {
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(head);
 	    return NULL;
 	}
-	if(likely(arcp_compare_store(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	if(likely(arcp_compare_store(&aqueue->head, head, next))) {
 	    struct arcp_region *item = arcp_exchange(&next->item, NULL);
-	    arcp_release((struct arcp_region *) next);
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(next);
+	    arcp_release(head);
 	    return item;
 	}
-	arcp_release((struct arcp_region *) next);
-	arcp_release((struct arcp_region *) head);
+	arcp_release(next);
+	arcp_release(head);
     }
 }
 
@@ -160,12 +160,12 @@ static inline struct arcp_region *aqueue_peek(aqueue_t *aqueue) {
 	head = (struct aqueue_node *) arcp_load(&aqueue->head);
 	next = (struct aqueue_node *) arcp_load(&head->next);
 	if(next == NULL) {
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(head);
 	    return NULL;
 	}
 	item = arcp_load(&next->item);
-	arcp_release((struct arcp_region *) head);
-	arcp_release((struct arcp_region *) next);
+	arcp_release(head);
+	arcp_release(next);
 	if(item == NULL) {
 	    atomic_thread_fence(memory_order_seq_cst);
 	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
@@ -194,35 +194,35 @@ static inline bool aqueue_compare_deq(aqueue_t *aqueue, struct arcp_region *item
 	head = (struct aqueue_node *) arcp_load(&aqueue->head);
 	next = (struct aqueue_node *) arcp_load(&head->next);
 	if(next == NULL) {
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(head);
 	    return false;
 	}
 	c_item = arcp_load_weak(&next->item);
 	if(c_item == NULL) {
 	    if(item != NULL) {
-		arcp_release((struct arcp_region *) next);
-		arcp_release((struct arcp_region *) head);
+		arcp_release(next);
+		arcp_release(head);
 		return false;
 	    }
 	    atomic_thread_fence(memory_order_seq_cst);
 	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
-		arcp_release((struct arcp_region *) next);
-		arcp_release((struct arcp_region *) head);
+		arcp_release(next);
+		arcp_release(head);
 		continue;
 	    }
 	} else if(c_item != item) {
-	    arcp_release((struct arcp_region *) next);
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(next);
+	    arcp_release(head);
 	    return false;
 	}
-	if(likely(arcp_compare_store(&aqueue->head, (struct arcp_region *) head, (struct arcp_region *) next))) {
+	if(likely(arcp_compare_store(&aqueue->head, head, next))) {
 	    arcp_store(&next->item, NULL);
-	    arcp_release((struct arcp_region *) next);
-	    arcp_release((struct arcp_region *) head);
+	    arcp_release(next);
+	    arcp_release(head);
 	    return true;
 	}
-	arcp_release((struct arcp_region *) next);
-	arcp_release((struct arcp_region *) head);
+	arcp_release(next);
+	arcp_release(head);
     }
 }
 

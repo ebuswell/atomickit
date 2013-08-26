@@ -70,8 +70,8 @@ static struct arcp_region *region1;
 static struct arcp_region *region2;
 static struct arcp_region *region3;
 
-atxn_handle_t *handle1;
-atxn_handle_t *handle2;
+struct atxn_handle *handle1;
+struct atxn_handle *handle2;
 
 /*************************/
 
@@ -82,9 +82,9 @@ static void test_atxn_init_region_fixture(void (*test)()) {
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
     region2 = alloca(ARCP_REGION_OVERHEAD + 14);
     region3 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
-    strcpy((char *) region3->data, ptrtest.string3);
+    strcpy((char *) ARCP_REGION2DATA(region1), ptrtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
+    strcpy((char *) ARCP_REGION2DATA(region3), ptrtest.string3);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
@@ -96,7 +96,7 @@ static void test_atxn_init() {
     ASSERT(!region1_destroyed);
     struct arcp_region *rg1 = atxn_load1(&atxn1);
     ASSERT(rg1 == region1);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string1) == 0);
     atxn_destroy(&atxn1);
 }
 
@@ -109,9 +109,9 @@ static void test_atxn_init_fixture(void (*test)()) {
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
     region2 = alloca(ARCP_REGION_OVERHEAD + 14);
     region3 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
-    strcpy((char *) region3->data, ptrtest.string3);
+    strcpy((char *) ARCP_REGION2DATA(region1), ptrtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
+    strcpy((char *) ARCP_REGION2DATA(region3), ptrtest.string3);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
@@ -147,8 +147,8 @@ static void test_atxn_load1() {
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(rg2 == region1);
-    ASSERT(strcmp((char *) rg1->data, (char *) rg2->data) == 0);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), (char *) ARCP_REGION2DATA(rg2)) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string1) == 0);
     atxn_release1(rg1);
     CHECKPOINT();
     atxn_release1(rg2);
@@ -160,7 +160,7 @@ static void test_atxn_load_weak1() {
     struct arcp_region *rg1 = atxn_load_weak1(&atxn1);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
-    ASSERT(strcmp((char *) region1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
     atxn_release1(region1);
     ASSERT(!region1_destroyed);
     atxn_destroy(&atxn1);
@@ -193,9 +193,9 @@ static void test_atxn_started_fixture(void (*test)()) {
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
     region2 = alloca(ARCP_REGION_OVERHEAD + 14);
     region3 = alloca(ARCP_REGION_OVERHEAD + 14);
-    strcpy((char *) region1->data, ptrtest.string1);
-    strcpy((char *) region2->data, ptrtest.string2);
-    strcpy((char *) region3->data, ptrtest.string3);
+    strcpy((char *) ARCP_REGION2DATA(region1), ptrtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
+    strcpy((char *) ARCP_REGION2DATA(region3), ptrtest.string3);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
@@ -271,13 +271,13 @@ static void test_atxn_load() {
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(rg2 == region1);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string1) == 0);
     struct arcp_region *rg3;
     r = atxn_load(handle1, &atxn2, &rg3);
     ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region2_destroyed);
     ASSERT(rg3 == region2);
-    ASSERT(strcmp((char *) rg3->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg3), ptrtest.string2) == 0);
     r = atxn_store(handle1, &atxn2, region3);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
@@ -287,7 +287,7 @@ static void test_atxn_load() {
     ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region3_destroyed);
     ASSERT(rg4 == region3);
-    ASSERT(strcmp((char *) rg4->data, ptrtest.string3) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg4), ptrtest.string3) == 0);
     atxn_release1(region1);
     atxn_abort(handle1);
     atxn_destroy(&atxn1);
@@ -330,7 +330,7 @@ static void test_atxn_store() {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg1 == region2);
-    ASSERT(strcmp((char *) rg1->data, ptrtest.string2) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string2) == 0);
     /* A second store is also visible to our handle */
     ASSERT(atxn_store(handle1, &atxn1, region3) == 0);
     ASSERT(!region1_destroyed);
@@ -342,7 +342,7 @@ static void test_atxn_store() {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg2 == region3);
-    ASSERT(strcmp((char *) rg2->data, ptrtest.string3) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg2), ptrtest.string3) == 0);
     /* This store is not visible to other handles */
     struct arcp_region *rg3;
     r = atxn_load(handle2, &atxn1, &rg3);
@@ -350,7 +350,7 @@ static void test_atxn_store() {
 	UNRESOLVED("atxn_load failed");
     }
     ASSERT(rg3 == region1);
-    ASSERT(strcmp((char *) rg3->data, ptrtest.string1) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg3), ptrtest.string1) == 0);
     atxn_abort(handle2);
     /* A committed store is globally visible */
     if(atxn_commit(handle1) != ATXN_SUCCESS) {
@@ -361,7 +361,7 @@ static void test_atxn_store() {
     ASSERT(!region3_destroyed);
     struct arcp_region *rg4 = atxn_load1(&atxn1);
     ASSERT(rg4 == region3);
-    ASSERT(strcmp((char *) rg4->data, ptrtest.string3) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg4), ptrtest.string3) == 0);
     atxn_release1(rg4);
     /* Now check that the commits cleaned up properly. */
     atxn_release1(region1);
@@ -401,12 +401,12 @@ static void test_atxn_commit() {
     ASSERT(atxn_commit(handle1) == ATXN_SUCCESS);
     struct arcp_region *rg3 = atxn_load1(&atxn1);
     ASSERT(rg3 == region3);
-    ASSERT(strcmp((char *) rg3->data, ptrtest.string3) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg3), ptrtest.string3) == 0);
     atxn_release1(rg3);
     ASSERT(atxn_commit(handle2) == ATXN_FAILURE);
     rg3 = atxn_load1(&atxn1);
     ASSERT(rg3 == region3);
-    ASSERT(strcmp((char *) rg3->data, ptrtest.string3) == 0);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(rg3), ptrtest.string3) == 0);
     atxn_release1(rg3);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);

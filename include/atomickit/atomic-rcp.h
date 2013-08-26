@@ -47,6 +47,34 @@ typedef struct {
     atomic_ptr/*<struct arcp_item *>*/ ptr;
 } arcp_t;
 
+struct arcp_region;
+
+/**
+ * Atomic Reference Counted Region
+ *
+ * The underlying data type which will be stored in the reference
+ * counted pointer.  Good code will not depend on the content of this
+ * struct.
+ *
+ * A region may be stored in an arbitrary number of reference counted
+ * pointers.
+ */
+struct arcp_region {
+    void (*destroy)(struct arcp_region *); /** Pointer to a
+					    * destruction function. */
+    atomic_uint_fast32_t refcount; /** High 16 bits, number of
+				    * pointers in which this is
+				    * referenced; low 16 bits, the
+				    * number of individual references
+				    * to this region. */
+};
+
+/* Used for miscellaneous alignment purposes */
+struct __arcp_region_data {
+    struct arcp_region;
+    uint8_t data[]; /** User-defined data. */
+};
+
 /**
  * \def ARCP_ALIGN The alignment of the data portion of an rcp region.
  * The maximum number of threads concurrently checking out a given
@@ -55,70 +83,33 @@ typedef struct {
  * will be equal to `ARCP_ALIGN - 1`. Check out will block for all
  * threads above this threshold.
  */
-#ifdef __LP64__
-# define ARCP_ALIGN 8
-#else
-# define ARCP_ALIGN 4
-#endif
-
-struct arcp_region;
-
-/**
- * Atomic Reference Counted Region Header
- *
- * The metadata needed for reference counting.
- */
-struct arcp_region_header {
-    atomic_uint_fast32_t refcount; /** High 16 bits, number of
-				    * pointers in which this is
-				    * referenced; low 16 bits, the
-				    * number of individual references
-				    * to this region. */
-    void (*destroy)(struct arcp_region *); /** Pointer to a
-					    * destruction function. */
-};
-
-/**
- * Atomic Reference Counted Region
- *
- * The underlying data type which will be stored in the reference
- * counted pointer.  In most cases, this will be automatically managed
- * and you will only be dealing with a pointer to the actual data
- * region.  Good code will not depend on the content of this struct.
- *
- * A region may be stored in an arbitrary number of reference counted
- * pointers.
- */
-struct arcp_region {
-    struct arcp_region_header header;
-    uint8_t data[1]; /** User-defined data. */
-};
+#define ARCP_ALIGN __alignof__(struct arcp_region *)
 
 /**
  * The size of the reference counted region that is not the user data.
  */
-#define ARCP_REGION_OVERHEAD (offsetof(struct arcp_region, data))
+#define ARCP_REGION_OVERHEAD (sizeof(struct __arcp_region_data))
 
 /* The mask for the transaction count. */
-#define ARCP_COUNTMASK ((uintptr_t) (ARCP_ALIGN - 1))
+#define __ARCP_COUNTMASK ((uintptr_t) (ARCP_ALIGN - 1))
 
 /* Gets the count for a given pointer. */
-#define ARCP_PTR2COUNT(ptr) (((uintptr_t) (ptr)) & ARCP_COUNTMASK)
+#define __ARCP_PTR2COUNT(ptr) (((uintptr_t) (ptr)) & __ARCP_COUNTMASK)
 
 /* Separates the pointer from the count */
-#define ARCP_PTRDECOUNT(ptr) ((struct arcp_region *) (((uintptr_t) (ptr)) & ~ARCP_COUNTMASK))
+#define __ARCP_PTRDECOUNT(ptr) ((struct arcp_region *) (((uintptr_t) (ptr)) & ~__ARCP_COUNTMASK))
 
 /**
  * Transforms a pointer to user data to a pointer to the corresponding
  * reference counted region.
  */
-#define ARCP_DATA2REGION(ptr) ((struct arcp_region *) (((intptr_t) (ptr)) - offsetof(struct arcp_region, data)))
+#define ARCP_DATA2REGION(ptr) ((struct arcp_region *) (((uintptr_t) (ptr)) - offsetof(struct __arcp_region_data, data)))
 
 /**
  * Transforms a pointer to a reference counted region to a pointer to
  * the corresponding user data.
  */
-#define ARCP_REGION2DATA(region) ((void *) &(region)->data)
+#define ARCP_REGION2DATA(region) ((void *) &(((struct __arcp_region_data *) region))->data)
 
 /**
  * Initialization value for `arcp_t`.
@@ -126,9 +117,9 @@ struct arcp_region {
 #define ARCP_VAR_INIT(region) { ATOMIC_PTR_VAR_INIT(region) }
 
 /**
- * Initialization value for `struct arcp_header`.
+ * Initialization value for `struct arcp_region`.
  */
-#define ARCP_REGION_HEADER_VAR_INIT(ptrcount, refcount, destroy) { ATOMIC_VAR_INIT((ptrcount << 16) | refcount), destroy }
+#define ARCP_REGION_VAR_INIT(ptrcount, refcount, destroy) { destroy, ATOMIC_VAR_INIT((ptrcount << 16) | refcount) }
 
 #define __ARCP_LITTLE_ENDIAN (((union {		\
 		    uint_fast32_t v;		\
@@ -146,7 +137,7 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
 	    int16_t second;
 	} s;
     } count;
-    uint_fast32_t o_count = atomic_load_explicit(&region->header.refcount, memory_order_acquire);
+    uint_fast32_t o_count = atomic_load_explicit(&region->refcount, memory_order_acquire);
     do {
 	count.v = o_count;
 	if(__ARCP_LITTLE_ENDIAN) {
@@ -156,7 +147,7 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
 	    count.s.first += ptrcount;
 	    count.s.second += refcount;
 	}
-    } while(unlikely(!atomic_compare_exchange_weak_explicit(&region->header.refcount, &o_count, count.v,
+    } while(unlikely(!atomic_compare_exchange_weak_explicit(&region->refcount, &o_count, count.v,
 							    memory_order_acq_rel, memory_order_acquire)));
     return count.v;
 }
@@ -175,8 +166,8 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
  * just be a simple wrapper around `afree`.
  */
 static inline void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *)) {
-    atomic_init(&region->header.refcount, 1);
-    region->header.destroy = destroy;
+    atomic_init(&region->refcount, 1);
+    region->destroy = destroy;
 }
 
 /**
@@ -194,7 +185,7 @@ static inline int arcp_refcount(struct arcp_region *region) {
 	    int16_t second;
 	} s;
     } count;
-    count.v = atomic_load_explicit(&region->header.refcount, memory_order_acquire);
+    count.v = atomic_load_explicit(&region->refcount, memory_order_acquire);
     if(__ARCP_LITTLE_ENDIAN) {
 	return count.s.first; /* low */
     } else {
@@ -218,7 +209,7 @@ static inline int arcp_ptrcount(struct arcp_region *region) {
 	    int16_t second;
 	} s;
     } count;
-    count.v = atomic_load_explicit(&region->header.refcount, memory_order_acquire);
+    count.v = atomic_load_explicit(&region->refcount, memory_order_acquire);
     if(__ARCP_LITTLE_ENDIAN) {
 	return count.s.second; /* high */
     } else {
@@ -227,7 +218,8 @@ static inline int arcp_ptrcount(struct arcp_region *region) {
 }
 
 /**
- * Increments the reference count of a reference counted region.
+ * Increments the reference count of a reference counted region,
+ * returning that region.
  *
  * In most cases, as references are never implicitly stolen, this need
  * not be used.  The exceptions are if a pointer to a region needs to
@@ -235,7 +227,7 @@ static inline int arcp_ptrcount(struct arcp_region *region) {
  *
  * @param region the region whose reference count should be incremented.
  */
-static inline struct arcp_region *arcp_incref(struct arcp_region *region) {
+static inline struct arcp_region *arcp_acquire(struct arcp_region *region) {
     if(region != NULL) {
 	__arcp_urefs(region, 0, 1);
     }
@@ -253,8 +245,8 @@ static inline void arcp_release(struct arcp_region *region) {
 	 * negative instead of 0 and the transferer will be
 	 * responsible for freeing the variable, if needed. */
 	if(__arcp_urefs(region, 0, -1) == 0) {
-	    if(region->header.destroy != NULL) {
-		region->header.destroy(region);
+	    if(region->destroy != NULL) {
+		region->destroy(region);
 	    }
 	}
     }
@@ -290,11 +282,11 @@ static inline void arcp_store(arcp_t *rcp, struct arcp_region *region) {
 	__arcp_urefs(region, 1, 0);
     }
     void *ptr = atomic_ptr_exchange(&rcp->ptr, region);
-    struct arcp_region *oldregion = ARCP_PTRDECOUNT(ptr);
+    struct arcp_region *oldregion = __ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
-	if(__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr)) == 0) {
-	    if(oldregion->header.destroy != NULL) {
-		oldregion->header.destroy(oldregion);
+	if(__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr)) == 0) {
+	    if(oldregion->destroy != NULL) {
+		oldregion->destroy(oldregion);
 	    }
 	}
     }
@@ -311,7 +303,7 @@ static inline void arcp_store(arcp_t *rcp, struct arcp_region *region) {
 static inline struct arcp_region *arcp_load(arcp_t *rcp) {
     void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
-	while(unlikely(ARCP_PTR2COUNT(ptr) == ARCP_ALIGN - 1)) {
+	while(unlikely(__ARCP_PTR2COUNT(ptr) == ARCP_ALIGN - 1)) {
 	    /* Spinlock if too many threads are accessing this at once. */
 	    cpu_relax();
 	    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
@@ -320,7 +312,7 @@ static inline struct arcp_region *arcp_load(arcp_t *rcp) {
 								memory_order_acq_rel, memory_order_acquire)));
     ptr += 1;
     /* We have one reference */
-    struct arcp_region *ret = ARCP_PTRDECOUNT(ptr);
+    struct arcp_region *ret = __ARCP_PTRDECOUNT(ptr);
     if(ret != NULL) {
 	__arcp_urefs(ret, 0, 1);
     }
@@ -328,8 +320,8 @@ static inline struct arcp_region *arcp_load(arcp_t *rcp) {
     while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr - 1,
 							      memory_order_acq_rel, memory_order_acquire))) {
 	/* Is the pointer still valid? */
-	if((ARCP_PTRDECOUNT(ptr) != ret)
-	   || (ARCP_PTR2COUNT(ptr) == 0)) { /* The second test will prevent a/b/a errors */
+	if((__ARCP_PTRDECOUNT(ptr) != ret)
+	   || (__ARCP_PTR2COUNT(ptr) == 0)) { /* The second test will prevent a/b/a errors */
 	    /* Somebody else has transferred / will transfer the
 	     * count. */
 	    if(ret != NULL) {
@@ -350,7 +342,7 @@ static inline struct arcp_region *arcp_load(arcp_t *rcp) {
  * @returns the contents of the pointer.
  */
 static inline struct arcp_region *arcp_load_weak(arcp_t *rcp) {
-    return ARCP_PTRDECOUNT(atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire));
+    return __ARCP_PTRDECOUNT(atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire));
 }
 
 /**
@@ -372,9 +364,9 @@ static inline struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region 
 	__arcp_urefs(region, 1, 0);
     }
     void *ptr = atomic_ptr_exchange(&rcp->ptr, region); /* full barrier */
-    struct arcp_region *oldregion = ARCP_PTRDECOUNT(ptr);
+    struct arcp_region *oldregion = __ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
-	__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr) + 1);
+	__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr) + 1);
     }
     return oldregion;
 }
@@ -403,7 +395,7 @@ static inline bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion
     }
     void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
-	if(ARCP_PTRDECOUNT(ptr) != oldregion) {
+	if(__ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */
 	    if(newregion != NULL) {
 		__arcp_urefs(newregion, -1, 0);
@@ -415,7 +407,7 @@ static inline bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion
     /* success! */
     if(oldregion != NULL) {
 	/* Transfer count */
-	__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr));
+	__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr));
 	/* refcount can't reach 0 here as the caller should still own a reference to oldptr */
     }
     return true;
@@ -427,12 +419,12 @@ static inline bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *o
     }
     void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
-	if(ARCP_PTRDECOUNT(ptr) != oldregion) {
+	if(__ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */
 	    if(newregion != NULL) {
 		if(__arcp_urefs(newregion, -1, 0) == 0) {
-		    if(newregion->header.destroy != NULL) {
-			newregion->header.destroy(newregion);
+		    if(newregion->destroy != NULL) {
+			newregion->destroy(newregion);
 		    }
 		}
 	    }
@@ -444,9 +436,9 @@ static inline bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *o
     /* success! */
     if(oldregion != NULL) {
 	/* Transfer count */
-	if(__arcp_urefs(oldregion, -1, ARCP_PTR2COUNT(ptr) - 1) == 0) {
-	    if(oldregion->header.destroy != NULL) {
-		oldregion->header.destroy(oldregion);
+	if(__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr) - 1) == 0) {
+	    if(oldregion->destroy != NULL) {
+		oldregion->destroy(oldregion);
 	    }
 	}
     }

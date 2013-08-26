@@ -29,12 +29,12 @@
 #include <atomickit/atomic-rcp.h>
 
 struct aary {
-    struct arcp_region_header header;
+    struct arcp_region;
     size_t length;
-    struct arcp_region *items[1];
+    struct arcp_region *items[];
 };
 
-#define AARY_OVERHEAD (offsetof(struct aary, items))
+#define AARY_OVERHEAD (sizeof(struct aary))
 
 #define AARY_SIZE(n) (AARY_OVERHEAD + sizeof(struct arcp_region *) * n)
 
@@ -46,9 +46,7 @@ static inline size_t aary_length(struct aary *array) {
 }
 
 static inline struct arcp_region *aary_load(struct aary *array, size_t i) {
-    struct arcp_region *ret = array->items[i];
-    arcp_incref(ret);
-    return ret;
+    return arcp_acquire(array->items[i]);
 }
 
 static inline struct arcp_region *aary_load_weak(struct aary *array, size_t i) {
@@ -56,9 +54,7 @@ static inline struct arcp_region *aary_load_weak(struct aary *array, size_t i) {
 }
 
 static inline struct arcp_region *aary_last(struct aary *array) {
-    struct arcp_region *ret = array->items[array->length - 1];
-    arcp_incref(ret);
-    return ret;
+    return arcp_acquire(array->items[array->length - 1]);
 }
 
 static inline struct arcp_region *aary_last_weak(struct aary *array) {
@@ -66,9 +62,7 @@ static inline struct arcp_region *aary_last_weak(struct aary *array) {
 }
 
 static inline struct arcp_region *aary_first(struct aary *array) {
-    struct arcp_region *ret = array->items[0];
-    arcp_incref(ret);
-    return ret;
+    return arcp_acquire(array->items[0]);
 }
 
 static inline struct arcp_region *aary_first_weak(struct aary *array) {
@@ -77,20 +71,17 @@ static inline struct arcp_region *aary_first_weak(struct aary *array) {
 
 static inline void aary_store(struct aary *array, size_t i, struct arcp_region *region) {
     arcp_release(array->items[i]);
-    arcp_incref(region);
-    array->items[i] = region;
+    array->items[i] = arcp_acquire(region);
 }
 
 static inline void aary_storefirst(struct aary *array, struct arcp_region *region) {
     arcp_release(array->items[0]);
-    arcp_incref(region);
-    array->items[0] = region;
+    array->items[0] = arcp_acquire(region);
 }
 
 static inline void aary_storelast(struct aary *array, struct arcp_region *region) {
     arcp_release(array->items[array->length - 1]);
-    arcp_incref(region);
-    array->items[array->length - 1] = region;
+    array->items[array->length - 1] = arcp_acquire(region);
 }
 
 struct aary *aary_insert(struct aary *array, size_t i, struct arcp_region *region);
@@ -106,7 +97,8 @@ struct aary *aary_dup_prepend(struct aary *array, struct arcp_region *region);
 struct aary *aary_shift(struct aary *array);
 struct aary *aary_dup_shift(struct aary *array);
 void aary_sortx(struct aary *array);
-void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg);
+void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *));
+void aary_sort_r(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg);
 void aary_reverse(struct aary *array);
 struct aary *aary_set_add(struct aary *array, struct arcp_region *region);
 struct aary *aary_dup_set_add(struct aary *array, struct arcp_region *region);

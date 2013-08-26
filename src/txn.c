@@ -22,7 +22,7 @@ static inline struct atxn_stub *create_stub(struct arcp_region *prev, struct arc
     arcp_init(&stub->prev, prev);
     arcp_init(&stub->value, value);
     atomic_store_explicit(&stub->clock, 0, memory_order_release);
-    arcp_region_init((struct arcp_region *) stub, (void (*)(struct arcp_region *)) __atxn_destroy_stub);
+    arcp_region_init(stub, (void (*)(struct arcp_region *)) __atxn_destroy_stub);
     return stub;
 }
 
@@ -31,8 +31,8 @@ int atxn_init(atxn_t *txn, struct arcp_region *region) {
     if(stub == NULL) {
 	return -1;
     }
-    arcp_init(&txn->rcp, (struct arcp_region *) stub);
-    arcp_release((struct arcp_region *) stub);
+    arcp_init(&txn->rcp, stub);
+    arcp_release(stub);
     return 0;
 }
 
@@ -54,7 +54,7 @@ struct arcp_region *atxn_load1(atxn_t *txn) {
 	/* Load current value */
 	ret = arcp_load(&stub->value);
     }
-    arcp_release((struct arcp_region *) stub);
+    arcp_release(stub);
     return ret;
 }
 
@@ -75,11 +75,11 @@ struct arcp_region *atxn_load_weak1(atxn_t *txn) {
 	/* Load current value */
 	ret = arcp_load_weak(&stub->value);
     }
-    arcp_release((struct arcp_region *) stub);
+    arcp_release(stub);
     return ret;
 }
 
-static void __atxn_handle_destroy(atxn_handle_t *handle) {
+static void __atxn_handle_destroy(struct atxn_handle *handle) {
     size_t i;
     for(i = 0; i < handle->nchecks; i++) {
 	arcp_release(handle->check_list[i].value);
@@ -87,18 +87,18 @@ static void __atxn_handle_destroy(atxn_handle_t *handle) {
     afree(handle->check_list, sizeof(struct atxn_check) * handle->nchecks);
     for(i = 0; i < handle->nupdates; i++) {
 	arcp_store(&handle->update_list[i].stub->prev, NULL);
-	arcp_release((struct arcp_region *) handle->update_list[i].stub);
+	arcp_release(handle->update_list[i].stub);
     }
     afree(handle->update_list, sizeof(struct atxn_update) * handle->nupdates);
     for(i = 0; i < handle->norphans; i++) {
 	arcp_release(handle->orphan_list[i]);
     }
     afree(handle->orphan_list, sizeof(struct arcp_region *) * handle->norphans);
-    afree(handle, sizeof(atxn_handle_t));
+    afree(handle, sizeof(struct atxn_handle));
 }
 
-atxn_handle_t *atxn_start() {
-    atxn_handle_t *ret = amalloc(sizeof(atxn_handle_t));
+struct atxn_handle *atxn_start() {
+    struct atxn_handle *ret = amalloc(sizeof(struct atxn_handle));
     if(ret == NULL) {
 	return NULL;
     }
@@ -111,7 +111,7 @@ atxn_handle_t *atxn_start() {
     ret->check_list = NULL;
     ret->update_list = NULL;
     ret->orphan_list = NULL;
-    arcp_region_init((struct arcp_region *) ret, (void (*)(struct arcp_region *)) __atxn_handle_destroy);
+    arcp_region_init(ret, (void (*)(struct arcp_region *)) __atxn_handle_destroy);
     return ret;
 }
 
@@ -132,7 +132,7 @@ atxn_handle_t *atxn_start() {
     }			\
 } while(0)
 
-static int update_list_insert(atxn_handle_t *handle, size_t i,
+static int update_list_insert(struct atxn_handle *handle, size_t i,
 			      atxn_t *location, struct arcp_region *region) {
     struct atxn_stub *stub = create_stub(NULL, region);
     if(stub == NULL) {
@@ -145,7 +145,7 @@ static int update_list_insert(atxn_handle_t *handle, size_t i,
     } else {
 	struct atxn_update *new_list = amalloc(sizeof(struct atxn_update) * (length + 1));
 	if(new_list == NULL) {
-	    arcp_release((struct arcp_region *) stub);
+	    arcp_release(stub);
 	    return -1;
 	}
 	memcpy(new_list, list, sizeof(struct atxn_update) * i);
@@ -160,7 +160,7 @@ static int update_list_insert(atxn_handle_t *handle, size_t i,
     return 0;
 }
 
-static int check_list_insert(atxn_handle_t *handle, size_t i,
+static int check_list_insert(struct atxn_handle *handle, size_t i,
 			     atxn_t *location, struct arcp_region *region) {
     size_t length = handle->nchecks;
     struct atxn_check *list = handle->check_list;
@@ -183,7 +183,7 @@ static int check_list_insert(atxn_handle_t *handle, size_t i,
     return 0;
 }
 
-static int orphan_list_append(atxn_handle_t *handle, struct arcp_region *region) {
+static int orphan_list_append(struct atxn_handle *handle, struct arcp_region *region) {
     size_t length = handle->norphans;
     struct arcp_region **list = handle->orphan_list;
     list = arealloc(list, sizeof(struct arcp_region *) * length, sizeof(struct arcp_region *) * (length + 1));
@@ -196,7 +196,7 @@ static int orphan_list_append(atxn_handle_t *handle, struct arcp_region *region)
     return 0;
 }
 
-enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_region **region) {
+enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_region **region) {
     /* First see if we already have this */
     size_t i;
     /* Check update list */
@@ -234,7 +234,7 @@ enum atxn_status atxn_load(atxn_handle_t *handle, atxn_t *txn, struct arcp_regio
     return ATXN_SUCCESS;
 }
 
-enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, struct arcp_region *value) {
+enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp_region *value) {
     int r;
     /* See if we've already set this previously */
     size_t i;
@@ -259,21 +259,21 @@ enum atxn_status atxn_store(atxn_handle_t *handle, atxn_t *txn, struct arcp_regi
     return ATXN_SUCCESS;
 }
 
-enum atxn_status atxn_commit(atxn_handle_t *handle) {
+enum atxn_status atxn_commit(struct atxn_handle *handle) {
     if(handle->nupdates == 0) {
-	arcp_release((struct arcp_region *) handle);
+	arcp_release(handle);
 	return ATXN_SUCCESS;
     }
     /* Enqueue handle */
-    int r = aqueue_enq(&atxn_queue, (struct arcp_region *) handle);
+    int r = aqueue_enq(&atxn_queue, handle);
     if(r != 0) {
-	arcp_release((struct arcp_region *) handle);
+	arcp_release(handle);
 	return ATXN_ERROR;
     }
     enum atxn_status ret;
     do {
 	/* Get next pending handle */
-	atxn_handle_t *next = (atxn_handle_t *) aqueue_peek(&atxn_queue);
+	struct atxn_handle *next = (struct atxn_handle *) aqueue_peek(&atxn_queue);
 	if(next == NULL) {
 	    /* Our handle must have finished before we could start working on it. */
 	    break;
@@ -325,7 +325,7 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 			/* Make sure this hasn't been processed to ensure stub is correct value */
 			if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
 			    /* Someone else did this step */
-			    arcp_release((struct arcp_region *) stub);
+			    arcp_release(stub);
 			    break;
 			}
 			/* Do the check */
@@ -334,10 +334,10 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 			    atomic_store_explicit(&next->status, ATXN_FAILURE, memory_order_release);
 			    procstatus = (unsigned long) -1L;
 			    atomic_store_explicit(&next->procstatus, procstatus, memory_order_release);
-			    arcp_release((struct arcp_region *) stub);
+			    arcp_release(stub);
 			    break;
 			}
-			arcp_release((struct arcp_region *) stub);
+			arcp_release(stub);
 		    }
 		    procstatus = atomic_fetch_or_explicit(&next->procstatus, donebit, memory_order_acq_rel) | donebit;
 		}
@@ -372,7 +372,7 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
 		    if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
 			/* Someone else did this step */
-			arcp_release((struct arcp_region *) oldstub);
+			arcp_release(oldstub);
 			break;
 		    }
 		    /* Get old value and store it in previous */
@@ -380,7 +380,7 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 		    arcp_store(&next->update_list[j].stub->prev, oldvalue);
 		    /* Store clock value */
 		    atomic_store_explicit(&next->update_list[j].stub->clock, clock, memory_order_release);
-		    arcp_release((struct arcp_region *) oldstub);
+		    arcp_release(oldstub);
 		}
 		procstatus = atomic_fetch_or_explicit(&next->procstatus, donebit, memory_order_acq_rel) | donebit;
 	    }
@@ -412,13 +412,13 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
 		    if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
 			/* Someone else did this step */
-			arcp_release((struct arcp_region *) oldstub);
+			arcp_release(oldstub);
 			break;
 		    }
 		    /* Set to the current stub */
-		    arcp_compare_store(&next->update_list[j].location->rcp, (struct arcp_region *) oldstub,
-					  (struct arcp_region *) next->update_list[j].stub);
-		    arcp_release((struct arcp_region *) oldstub);
+		    arcp_compare_store(&next->update_list[j].location->rcp, oldstub,
+					  next->update_list[j].stub);
+		    arcp_release(oldstub);
 		}
 		procstatus = atomic_fetch_or_explicit(&next->procstatus, donebit, memory_order_acq_rel) | donebit;
 	    }
@@ -438,9 +438,9 @@ enum atxn_status atxn_commit(atxn_handle_t *handle) {
 	atomic_store_explicit(&next->status, ATXN_SUCCESS, memory_order_release);
     dequeue:
 	/* Dequeue the handle */
-	aqueue_compare_deq(&atxn_queue, (struct arcp_region *) next);
-	arcp_release((struct arcp_region *) next);
+	aqueue_compare_deq(&atxn_queue, next);
+	arcp_release(next);
     } while((ret = atomic_load_explicit(&handle->status, memory_order_acquire)) == ATXN_PENDING);
-    arcp_release((struct arcp_region *) handle);
+    arcp_release(handle);
     return ret;
 }

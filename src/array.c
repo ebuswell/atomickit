@@ -1,6 +1,4 @@
-#define _GNU_SOURCE
 #include <stdlib.h>
-#undef _GNU_SOURCE
 #include <string.h>
 #include <stddef.h>
 #include <atomickit/atomic-array.h>
@@ -21,11 +19,10 @@ struct aary *aary_dup(struct aary *array) {
     }
     size_t i;
     for(i = 0; i < array->length; i++) {
-	arcp_incref(array->items[i]);
-	ret->items[i] = array->items[i];
+	ret->items[i] = arcp_acquire(array->items[i]);
     }
     ret->length = array->length;
-    arcp_region_init((struct arcp_region *) ret, (void (*)(struct arcp_region *)) __aary_destroy);
+    arcp_region_init(ret, (void (*)(struct arcp_region *)) __aary_destroy);
     return ret;
 }
 
@@ -36,7 +33,7 @@ struct aary *aary_new(size_t length) {
     }
     memset(ret->items, 0, sizeof(struct arcp_region *) * length);
     ret->length = length;
-    arcp_region_init((struct arcp_region *) ret, (void (*)(struct arcp_region *)) __aary_destroy);
+    arcp_region_init(ret, (void (*)(struct arcp_region *)) __aary_destroy);
     return ret;
 }
 
@@ -72,8 +69,7 @@ struct aary *aary_insert(struct aary *array, size_t i, struct arcp_region *regio
 	array = new_array;
     }
     array->length = length + 1;
-    arcp_incref(region);
-    array->items[i] = region;
+    array->items[i] = arcp_acquire(region);
     return array;
 }
 
@@ -85,17 +81,14 @@ struct aary *aary_dup_insert(struct aary *array, size_t i, struct arcp_region *r
     }
     size_t j;
     for(j = 0; j < i; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j] = array->items[j];
+	new_array->items[j] = arcp_acquire(array->items[j]);
     }
     for(; j < length; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j + 1] = array->items[j];
+	new_array->items[j + 1] = arcp_acquire(array->items[j]);
     }
     new_array->length = length + 1;
-    arcp_incref(region);
-    new_array->items[i] = region;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    new_array->items[i] = arcp_acquire(region);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
@@ -132,15 +125,13 @@ struct aary *aary_dup_remove(struct aary *array, size_t i) {
     }
     size_t j;
     for(j = 0; j < i; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j] = array->items[j];
+	new_array->items[j] = arcp_acquire(array->items[j]);
     }
     for(; j + 1 < length; j++) {
-	arcp_incref(array->items[j + 1]);
-	new_array->items[j] = array->items[j + 1];
+	new_array->items[j] = arcp_acquire(array->items[j + 1]);
     }
     new_array->length = length - 1;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
@@ -151,8 +142,7 @@ struct aary *aary_append(struct aary *array, struct arcp_region *region) {
 	return NULL;
     }
     array->length = length + 1;
-    arcp_incref(region);
-    array->items[length] = region;
+    array->items[length] = arcp_acquire(region);
     return array;
 }
 
@@ -164,13 +154,11 @@ struct aary *aary_dup_append(struct aary *array, struct arcp_region *region) {
     }
     size_t j;
     for(j = 0; j < length; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j] = array->items[j];
+	new_array->items[j] = arcp_acquire(array->items[j]);
     }
     new_array->length = length + 1;
-    arcp_incref(region);
-    new_array->items[length] = region;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    new_array->items[length] = arcp_acquire(region);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
@@ -194,11 +182,10 @@ struct aary *aary_dup_pop(struct aary *array) {
     }
     size_t j;
     for(j = 0; j < length - 1; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j] = array->items[j];
+	new_array->items[j] = arcp_acquire(array->items[j]);
     }
     new_array->length = length - 1;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
@@ -217,8 +204,7 @@ struct aary *aary_prepend(struct aary *array, struct arcp_region *region) {
 	array = new_array;
     }
     array->length = length + 1;
-    arcp_incref(region);
-    array->items[0] = region;
+    array->items[0] = arcp_acquire(region);
     return array;
 }
 
@@ -230,13 +216,11 @@ struct aary *aary_dup_prepend(struct aary *array, struct arcp_region *region) {
     }
     size_t j;
     for(j = 0; j < length; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j + 1] = array->items[j];
+	new_array->items[j + 1] = arcp_acquire(array->items[j]);
     }
     new_array->length = length + 1;
-    arcp_incref(region);
-    new_array->items[0] = region;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    new_array->items[0] = arcp_acquire(region);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
@@ -270,42 +254,40 @@ struct aary *aary_dup_shift(struct aary *array) {
     }
     size_t j;
     for(j = 1; j < length; j++) {
-	arcp_incref(array->items[j]);
-	new_array->items[j - 1] = array->items[j];
+	new_array->items[j - 1] = arcp_acquire(array->items[j]);
     }
     new_array->length = length - 1;
-    arcp_region_init((struct arcp_region *) new_array, (void (*)(struct arcp_region *)) __aary_destroy);
+    arcp_region_init(new_array, (void (*)(struct arcp_region *)) __aary_destroy);
     return new_array;
 }
 
-static int __aary_comparx(const struct arcp_region **region1, const struct arcp_region **region2) {
-    if(*region1 < *region2) {
- 	return -1;
-    } else if(*region1 == *region2) {
-	return 0;
-    } else {
-	return 1;
-    }
-}
-
 void aary_sortx(struct aary *array) {
-    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) __aary_comparx);
+    int qsort_compar(const struct arcp_region **region1, const struct arcp_region **region2) {
+	if(*region1 < *region2) {
+	    return -1;
+	} else if(*region1 == *region2) {
+	    return 0;
+	} else {
+	    return 1;
+	}
+    }
+    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) qsort_compar);
 }
 
-struct aary_sort_struct {
-    int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg);
-    void *arg;
-};
+void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *)) {
+    int qsort_compar(const struct arcp_region **region1, const struct arcp_region **region2) {
+	return compar(*region1, *region2);
+    }
 
-static int __aary_compar(const struct arcp_region **region1, const struct arcp_region **region2, struct aary_sort_struct *sarg) {
-    return sarg->compar(*region1, *region2, sarg->arg);
+    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) qsort_compar);
 }
 
-void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg) {
-    struct aary_sort_struct sarg;
-    sarg.arg = arg;
-    sarg.compar = compar;
-    qsort_r(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *, void *)) __aary_compar, &sarg);
+void aary_sort_r(struct aary *array, int (*compar)(const struct arcp_region *, const struct arcp_region *, void *arg), void *arg) {
+    int qsort_compar(const struct arcp_region **region1, const struct arcp_region **region2) {
+	return compar(*region1, *region2, arg);
+    }
+
+    qsort(array->items, array->length, sizeof(struct arcp_region *), (int (*)(const void *, const void *)) qsort_compar);
 }
 
 void aary_reverse(struct aary *array) {
@@ -317,7 +299,7 @@ void aary_reverse(struct aary *array) {
     }
 }
 
-/* overwriteary, insertary, removeary, overwriteendary, concat, popary, overwritestartary, concat, shiftary */
+/* TODO: overwriteary, insertary, removeary, overwriteendary, concat, popary, overwritestartary, concat, shiftary */
 
 struct aary *aary_set_add(struct aary *array, struct arcp_region *region) {
     /* search for region */
@@ -373,4 +355,4 @@ bool aary_set_contains(struct aary *array, struct arcp_region *region) {
     return false;
 }
 
-/* union (|), intersection (&), difference (\), disjunction (^), equal, disjoint, subset, proper_subset, superset, proper_superset */
+/* TODO: union (|), intersection (&), difference (\), disjunction (^), equal, disjoint, subset, proper_subset, superset, proper_superset */

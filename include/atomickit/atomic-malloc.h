@@ -51,7 +51,7 @@
  * @returns a pointer to an allocated, but not initialized, memory
  * region, or NULL on error.
  */
-void *amalloc(size_t size);
+void *amalloc(size_t size) __attribute__((malloc));
 
 /**
  * Free a region previously allocated with `amalloc()`.
