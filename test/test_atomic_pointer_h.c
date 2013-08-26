@@ -35,6 +35,7 @@ void *alloca(size_t);
 #endif
 
 #include <atomickit/atomic-pointer.h>
+#include "alltests.h"
 #include "test.h"
 
 static struct {

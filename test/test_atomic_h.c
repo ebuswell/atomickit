@@ -20,6 +20,7 @@
  */
 
 #include "atomickit/atomic.h"
+#include "alltests.h"
 #include "test.h"
 
 static volatile atomic_bool abool = ATOMIC_VAR_INIT(false);

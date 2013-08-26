@@ -19,15 +19,7 @@
  */
 #include <stdio.h>
 #include "test.h"
-
-int run_atomic_h_test_suite();
-int run_atomic_float_h_test_suite();
-int run_atomic_pointer_h_test_suite();
-int run_atomic_rcp_h_test_suite();
-int run_atomic_queue_h_test_suite();
-int run_atomic_malloc_h_test_suite();
-int run_atomic_txn_h_test_suite();
-int run_atomic_array_h_test_suite();
+#include "alltests.h"
 
 int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
     int r;

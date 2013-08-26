@@ -39,7 +39,6 @@
  */
 #ifndef ATOMICKIT_ATOMIC_MALLOC_H
 #define ATOMICKIT_ATOMIC_MALLOC_H 1
-#endif /* ! ATOMICKIT_ATOMIC_MALLOC_H */
 
 #include <sys/types.h>
 #include <stdbool.h>
@@ -88,3 +87,5 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize);
  * not be resized in place.
  */
 bool atryrealloc(void *ptr, size_t oldsize, size_t newsize);
+
+#endif /* ! ATOMICKIT_ATOMIC_MALLOC_H */

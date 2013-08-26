@@ -36,6 +36,7 @@ void *alloca(size_t);
 
 #include <atomickit/atomic-rcp.h>
 #include <atomickit/atomic-queue.h>
+#include "alltests.h"
 #include "test.h"
 
 static struct {

@@ -130,19 +130,19 @@ int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)(
  *
  * @returns zero on success, nonzero on failure.
  */
-int print_test_results();
+int print_test_results(void);
 
 /**
  * Determine whether all the tests have succeeded or not.
  *
  * @returns true if all tests have succeeded, false otherwise.
  */
-bool tests_succeeded();
+bool tests_succeeded(void);
 
 /**
  * Set the test framework to run the tests in the calling thread.
  */
-void test_config_nofork();
+void test_config_nofork(void);
 
 /**
  * Checkpoint the test in case of unexpected error.

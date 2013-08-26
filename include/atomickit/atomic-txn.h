@@ -48,8 +48,8 @@ typedef struct {
  */
 struct atxn_stub {
     struct arcp_region_header header;
-    atomic_uint clock; /** The clock value at which this stub
-				 * was created. */
+    atomic_uint clock; /** The clock value at which this stub was
+			* created. */
     arcp_t prev; /** The previous value. */
     arcp_t value; /** The current value. */
 };
@@ -187,7 +187,7 @@ static inline void atxn_release1(struct arcp_region *region) {
  *
  * @returns a pointer to the transaction handle.
  */
-atxn_handle_t *atxn_start();
+atxn_handle_t *atxn_start(void);
 
 /**
  * Abort and close a transaction, releasing all acquired values.

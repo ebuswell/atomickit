@@ -18,6 +18,7 @@
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <atomickit/atomic-float.h>
+#include "alltests.h"
 #include "test.h"
 
 static volatile atomic_float afloat;
@@ -111,6 +112,97 @@ static void test_atomic_float_compare_exchange_weak() {
     ASSERT(atomic_float_load_explicit(&afloat, memory_order_relaxed) == 3.1f);
 }
 
+/******************************************************/
+
+static void test_atomic_double_init() {
+    CHECKPOINT();
+    atomic_double_init(&adouble, 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 2.1);
+}
+
+static void test_atomic_double_is_lock_free() {
+    CHECKPOINT();
+    (void) atomic_double_is_lock_free(&adouble);
+}
+
+/******************************************************/
+
+static void test_atomic_double_fixture(void (*test)()) {
+    atomic_double_init(&adouble, 2.1);
+    test();
+}
+
+static void test_atomic_double_store_explicit() {
+    CHECKPOINT();
+    atomic_double_store_explicit(&adouble, 3.1, memory_order_relaxed);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_store() {
+    CHECKPOINT();
+    atomic_double_store(&adouble, 3.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_load_explicit() {
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 2.1);
+}
+
+static void test_atomic_double_load() {
+    ASSERT(atomic_double_load(&adouble) == 2.1);
+}
+
+static void test_atomic_double_exchange_explicit() {
+    CHECKPOINT();
+    double dr = atomic_double_exchange_explicit(&adouble, 3.1, memory_order_relaxed);
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_exchange() {
+    CHECKPOINT();
+    double dr = atomic_double_exchange(&adouble, 3.1);
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_compare_exchange_strong_explicit() {
+    double dr = 1.1;
+    ASSERT(!atomic_double_compare_exchange_strong_explicit(&adouble, &dr, 3.1, memory_order_relaxed, memory_order_relaxed));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_compare_exchange_strong_explicit(&adouble, &dr, 3.1, memory_order_relaxed, memory_order_relaxed));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_compare_exchange_strong() {
+    double dr = 1.1;
+    ASSERT(!atomic_double_compare_exchange_strong(&adouble, &dr, 3.1));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_compare_exchange_strong(&adouble, &dr, 3.1));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_compare_exchange_weak_explicit() {
+    double dr = 1.1;
+    ASSERT(!atomic_double_compare_exchange_weak_explicit(&adouble, &dr, 3.1, memory_order_relaxed, memory_order_relaxed));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_compare_exchange_weak_explicit(&adouble, &dr, 3.1, memory_order_relaxed, memory_order_relaxed));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+static void test_atomic_double_compare_exchange_weak() {
+    double dr = 1.1;
+    ASSERT(!atomic_double_compare_exchange_weak(&adouble, &dr, 3.1));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_compare_exchange_weak(&adouble, &dr, 3.1));
+    ASSERT(dr == 2.1);
+    ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
+}
+
+
 int run_atomic_float_h_test_suite() {
     int r;
     void (*atomic_float_blank_tests[])() = { test_atomic_float_init, test_atomic_float_is_lock_free, NULL };
@@ -140,21 +232,29 @@ int run_atomic_float_h_test_suite() {
 	return r;
     }
 
-    void (*atomic_double_tests[])() = { NULL, NULL,
-					NULL, NULL,
-					NULL, NULL,
-					NULL,
-					NULL,
-					NULL,
-					NULL, NULL };
+    void (*atomic_double_blank_tests[])() = { test_atomic_double_init, test_atomic_double_is_lock_free, NULL };
+    char *atomic_double_blank_test_names[] = { "atomic_double_init", "atomic_double_is_lock_free", NULL };
+
+    r = run_test_suite(NULL, atomic_double_blank_test_names, atomic_double_blank_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    void (*atomic_double_tests[])() = { test_atomic_double_store_explicit, test_atomic_double_store,
+				       test_atomic_double_load_explicit, test_atomic_double_load,
+				       test_atomic_double_exchange_explicit, test_atomic_double_exchange,
+				       test_atomic_double_compare_exchange_strong_explicit,
+				       test_atomic_double_compare_exchange_strong,
+				       test_atomic_double_compare_exchange_weak_explicit,
+				       test_atomic_double_compare_exchange_weak, NULL };
     char *atomic_double_test_names[] = { "atomic_double_store_explicit", "atomic_double_store",
-					 "atomic_double_load_explicit", "atomic_double_load",
-					 "atomic_double_exchange_explicit", "atomic_double_exchange",
-					 "atomic_double_compare_exchange_strong_explicit",
-					 "atomic_double_compare_exchange_strong",
-					 "atomic_double_compare_exchange_weak_explicit",
-					 "atomic_double_compare_exchange_weak", NULL };
-    r = run_test_suite(NULL, atomic_double_test_names, atomic_double_tests);
+					"atomic_double_load_explicit", "atomic_double_load",
+					"atomic_double_exchange_explicit", "atomic_double_exchange",
+					"atomic_double_compare_exchange_strong_explicit",
+					"atomic_double_compare_exchange_strong",
+					"atomic_double_compare_exchange_weak_explicit",
+					"atomic_double_compare_exchange_weak", NULL };
+    r = run_test_suite(test_atomic_double_fixture, atomic_double_test_names, atomic_double_tests);
     if(r != 0) {
 	return r;
     }

@@ -35,6 +35,7 @@ void *alloca(size_t);
 #endif
 
 #include <atomickit/atomic-txn.h>
+#include "alltests.h"
 #include "test.h"
 
 static struct {
@@ -90,7 +91,7 @@ static void test_atxn_init_region_fixture(void (*test)()) {
     test();
 }
 
-void test_atxn_init() {
+static void test_atxn_init() {
     ASSERT(atxn_init(&atxn1, region1) == 0);
     ASSERT(!region1_destroyed);
     struct arcp_region *rg1 = atxn_load1(&atxn1);
@@ -218,7 +219,7 @@ static void test_atxn_started_fixture(void (*test)()) {
     test();
 }
 
-void test_atxn_abort() {
+static void test_atxn_abort() {
     CHECKPOINT();
     struct arcp_region *rg;
     int r = atxn_load(handle1, &atxn1, &rg);
@@ -234,7 +235,7 @@ void test_atxn_abort() {
     ASSERT(region1_destroyed);
 }
 
-void test_atxn_status() {
+static void test_atxn_status() {
     ASSERT(atxn_status(handle1) == ATXN_PENDING);
     struct arcp_region *rg;
     enum atxn_status r = atxn_load(handle1, &atxn1, &rg);
@@ -259,7 +260,7 @@ void test_atxn_status() {
     ASSERT(atxn_status(handle1) == ATXN_FAILURE);
 }
 
-void test_atxn_load() {
+static void test_atxn_load() {
     CHECKPOINT();
     struct arcp_region *rg1;
     enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
@@ -317,7 +318,7 @@ void test_atxn_load() {
     ASSERT(atxn_status(handle1) == ATXN_FAILURE);
 }
 
-void test_atxn_store() {
+static void test_atxn_store() {
     CHECKPOINT();
     /* Store is visible to our handle */
     ASSERT(atxn_store(handle1, &atxn1, region2) == 0);
@@ -376,7 +377,7 @@ void test_atxn_store() {
     ASSERT(region2_destroyed);
 }
 
-void test_atxn_commit() {
+static void test_atxn_commit() {
     CHECKPOINT();
     struct arcp_region *rg1;
     enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);

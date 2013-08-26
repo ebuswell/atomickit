@@ -20,6 +20,7 @@
 #include "config.h"
 
 #include <atomickit/atomic-malloc.h>
+#include "alltests.h"
 #include "test.h"
 
 #define NSIZES 8

@@ -140,7 +140,7 @@ int no_test(char *test_name, enum test_status result, char *explanation) {
     return 0;
 }
 
-int test_set_error(int myerrno, char *explanation, struct test_result *result) {
+static int test_set_error(int myerrno, char *explanation, struct test_result *result) {
     if(result->explanation != NULL) {
 	free(result->explanation);
     }

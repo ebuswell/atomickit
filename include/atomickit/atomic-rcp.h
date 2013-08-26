@@ -74,7 +74,8 @@ struct arcp_region_header {
 				    * referenced; low 16 bits, the
 				    * number of individual references
 				    * to this region. */
-    void (*destroy)(struct arcp_region *); /** Pointer to a destruction function */
+    void (*destroy)(struct arcp_region *); /** Pointer to a
+					    * destruction function. */
 };
 
 /**
