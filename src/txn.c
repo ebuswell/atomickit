@@ -45,7 +45,16 @@ struct arcp_region *atxn_load1(atxn_t *txn) {
     if(atomic_load_explicit(&stub->clock, memory_order_acquire) == clock) {
 	/* Load previous value */
 	ret = arcp_load(&stub->prev);
-	if(clock != atomic_load(&atxn_clock)) { /* Memory barrier */
+	if(clock != atomic_load(&atxn_clock)) {
+	    /* Memory barrier. I think I can remove this, but it makes
+	     * me pretty nervous... Basically, the situation we're
+	     * guarding against is where thread1 reads prev, then
+	     * thread2 updates the clock, and thread3 removes prev on
+	     * destroying the handle.  However, I think I can remove
+	     * this, as happens-before is transitive for acq_rel, and
+	     * thread3 removing prev->thread x setting
+	     * success->thread2 updating the clock.  Any way about it,
+	     * this is pretty dicey. */
 	    /* Counter changed; return current value */
 	    arcp_release(ret);
 	    ret = arcp_load(&stub->value);
@@ -323,7 +332,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 		    for(; j < max; j++) {
 			struct atxn_stub *stub = (struct atxn_stub *) arcp_load(&next->check_list[j].location->rcp);
 			/* Make sure this hasn't been processed to ensure stub is correct value */
-			if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
+			if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			    /* Someone else did this step */
 			    arcp_release(stub);
 			    break;
@@ -370,7 +379,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 		for(; j < max; j++) {
 		    struct atxn_stub *oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
-		    if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
+		    if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			/* Someone else did this step */
 			arcp_release(oldstub);
 			break;
@@ -410,7 +419,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 		for(; j < max; j++) {
 		    struct atxn_stub *oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
-		    if((procstatus = atomic_load(&next->procstatus)) & donebit) { /* Full memory barrier */
+		    if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			/* Someone else did this step */
 			arcp_release(oldstub);
 			break;

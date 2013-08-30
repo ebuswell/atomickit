@@ -167,7 +167,6 @@ static inline struct arcp_region *aqueue_peek(aqueue_t *aqueue) {
 	arcp_release(head);
 	arcp_release(next);
 	if(item == NULL) {
-	    atomic_thread_fence(memory_order_seq_cst);
 	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
 		continue;
 	    }
@@ -204,7 +203,6 @@ static inline bool aqueue_compare_deq(aqueue_t *aqueue, struct arcp_region *item
 		arcp_release(head);
 		return false;
 	    }
-	    atomic_thread_fence(memory_order_seq_cst);
 	    if(unlikely((struct aqueue_node *) arcp_load_weak(&aqueue->head) != head)) {
 		arcp_release(next);
 		arcp_release(head);

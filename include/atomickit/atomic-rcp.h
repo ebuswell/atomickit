@@ -264,7 +264,7 @@ static inline void arcp_init(arcp_t *rcp, struct arcp_region *region) {
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    atomic_ptr_store(&rcp->ptr, region); /* full barrier */
+    atomic_ptr_store_explicit(&rcp->ptr, region, memory_order_release);
 }
 
 /**
@@ -363,7 +363,7 @@ static inline struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region 
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    void *ptr = atomic_ptr_exchange(&rcp->ptr, region); /* full barrier */
+    void *ptr = atomic_ptr_exchange_explicit(&rcp->ptr, region, memory_order_acq_rel);
     struct arcp_region *oldregion = __ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
 	__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr) + 1);
@@ -403,7 +403,7 @@ static inline bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion
 	    return false;
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, newregion,
-								memory_order_seq_cst, memory_order_acquire))); /* full barrier */
+								memory_order_acq_rel, memory_order_acquire)));
     /* success! */
     if(oldregion != NULL) {
 	/* Transfer count */
@@ -432,7 +432,7 @@ static inline bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *o
 	    return false;
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, newregion,
-								memory_order_seq_cst, memory_order_acquire))); /* full barrier */
+								memory_order_acq_rel, memory_order_acquire)));
     /* success! */
     if(oldregion != NULL) {
 	/* Transfer count */
