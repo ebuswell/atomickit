@@ -404,14 +404,63 @@ typedef struct {
 		     /* C */ desired)					\
     atomic_store_explicit((object), (desired), memory_order_seq_cst)
 
-#define __atomic_load(object, sfence, lfence)				\
+#define __atomic_load_lock(object)					\
 ({									\
     __typeof__((object)->counter) __ret;				\
     switch(sizeof((object)->counter)) {					\
     case __X86_CASE_B:							\
     {									\
 	volatile uint8_t *__ptr = (volatile uint8_t *)&(object)->counter; \
-	__asm__ __volatile__(sfence "movb %1,%b0" lfence		\
+	__asm__ __volatile__("lock; xaddb %b0, %1"			\
+			     : "=q" (__ret), "+m" (*__ptr)		\
+			     : "0" (0)					\
+			     : "memory", "cc");				\
+	break;								\
+    }									\
+    case __X86_CASE_W:							\
+    {									\
+	volatile uint16_t *__ptr = (volatile uint16_t *)&(object)->counter; \
+	__asm__ __volatile__("lock; xaddw %w0, %1"			\
+			     : "=r" (__ret), "+m" (*__ptr)		\
+			     : "0" (0)					\
+			     : "memory", "cc");				\
+	break;								\
+    }									\
+    case __X86_CASE_L:							\
+    {									\
+	volatile uint32_t *__ptr = (volatile uint32_t *)&(object)->counter; \
+	__asm__ __volatile__("lock; xaddl %0, %1"			\
+			     : "=r" (__ret), "+m" (*__ptr)		\
+			     : "0" (0)					\
+			     : "memory", "cc");				\
+	break;								\
+    }									\
+    case __X86_CASE_Q:							\
+    {									\
+	volatile uint64_t *__ptr = (volatile uint64_t *)&(object)->counter; \
+	__asm__ __volatile__("lock; xaddq %q0, %1"			\
+			     : "=r" (__ret), "+m" (*__ptr)		\
+			     : "0" (0)					\
+			     : "memory", "cc");				\
+	break;								\
+    }									\
+    case __X86_CASE_Q_EMU:						\
+	__AK_64not_implemented();					\
+	break;								\
+    default:								\
+	__AK_wrong_size();						\
+    }									\
+    __ret;								\
+})
+
+#define __atomic_load(object)						\
+({									\
+    __typeof__((object)->counter) __ret;				\
+    switch(sizeof((object)->counter)) {					\
+    case __X86_CASE_B:							\
+    {									\
+	volatile uint8_t *__ptr = (volatile uint8_t *)&(object)->counter; \
+	__asm__ __volatile__("movb %1,%b0"				\
 			     : "=q" (__ret)				\
 			     : "m" (*__ptr)				\
 			     : "memory");				\
@@ -420,7 +469,7 @@ typedef struct {
     case __X86_CASE_W:							\
     {									\
 	volatile uint16_t *__ptr = (volatile uint16_t *)&(object)->counter; \
-	__asm__ __volatile__(sfence "movw %1,%w0" lfence		\
+	__asm__ __volatile__("movw %1,%w0"				\
 			     : "=r" (__ret)				\
 			     : "m" (*__ptr)				\
 			     : "memory");				\
@@ -429,7 +478,7 @@ typedef struct {
     case __X86_CASE_L:							\
     {									\
 	volatile uint32_t *__ptr = (volatile uint32_t *)&(object)->counter; \
-	__asm__ __volatile__(sfence "movl %1,%0" lfence		\
+	__asm__ __volatile__("movl %1,%0"				\
 			     : "=r" (__ret)				\
 			     : "m" (*__ptr)				\
 			     : "memory");				\
@@ -438,7 +487,7 @@ typedef struct {
     case __X86_CASE_Q:							\
     {									\
 	volatile uint64_t *__ptr = (volatile uint64_t *)&(object)->counter; \
-	__asm__ __volatile__(sfence "movq %1,%q0" lfence		\
+	__asm__ __volatile__("movq %1,%q0"				\
 			     : "=r" (__ret)				\
 			     : "m" (*__ptr)				\
 			     : "memory");				\
@@ -471,11 +520,11 @@ typedef struct {
     case memory_order_acquire:						\
     case memory_order_release:						\
     case memory_order_acq_rel:						\
-	__ret2 = __atomic_load((object), "", "");			\
+	__ret2 = __atomic_load(object);					\
 	break;								\
     case memory_order_seq_cst:						\
     default:								\
-	__ret2 = __atomic_load((object), "sfence; ", "; lfence");	\
+	__ret2 = __atomic_load_lock(object);				\
     }									\
     __ret2;								\
 })
