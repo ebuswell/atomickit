@@ -677,16 +677,26 @@ typedef struct {
 						/* memory_order */ failure) \
 ({									\
     bool __ret2;							\
-    switch((void) (failure), (success)) { /* evaluate and discard the failure argument */ \
+    switch((success)) { /* evaluate and discard the failure argument */ \
     case memory_order_relaxed:						\
     case memory_order_consume:						\
     case memory_order_acquire:						\
     case memory_order_release:						\
     case memory_order_acq_rel:						\
+    if((failure) == memory_order_seq_cst) {				\
+	typeof(expected) __expected = (expected);			\
+	typeof(object) __object = (object);				\
+	__ret2 = __atomic_compare_exchange(__object, __expected, (desired), ""); \
+	if(!__ret2) {							\
+	    *__expected = __atomic_load_lock(__object);			\
+	}								\
+    } else {								\
 	__ret2 = __atomic_compare_exchange((object), (expected), (desired), ""); \
-	break;								\
+    }									\
+    break;								\
     case memory_order_seq_cst:						\
     default:								\
+	(void) failure;							\
 	__ret2 = __atomic_compare_exchange((object), (expected), (desired), "lock;"); \
     }									\
     __ret2;								\
