@@ -70,14 +70,14 @@ static struct arcp_region *region3;
 static struct aary *array;
 
 /*************************/
-static void test_aary_new() {
+static void test_aary_create() {
     CHECKPOINT();
-    struct aary *ary = aary_new(0);
+    struct aary *ary = aary_create(0);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 0);
     arcp_release(ary);
     CHECKPOINT();
-    ary = aary_new(1024);
+    ary = aary_create(1024);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 1024);
     ASSERT(aary_load_phantom(ary, 1023) == NULL);
@@ -98,7 +98,7 @@ static void test_aary_init_fixture(void (*test)()) {
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
-    array = aary_new(2);
+    array = aary_create(2);
     if(array == NULL) {
 	UNRESOLVED("Could not create array");
     }
@@ -168,7 +168,7 @@ static void test_aary_populate_part_fixture(void (*test)()) {
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
-    array = aary_new(2);
+    array = aary_create(2);
     if(array == NULL) {
 	UNRESOLVED("Could not create array");
     }
@@ -598,7 +598,7 @@ static void test_aary_populate_full_fixture(void (*test)()) {
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
-    array = aary_new(3);
+    array = aary_create(3);
     if(array == NULL) {
 	UNRESOLVED("Could not create array");
     }
@@ -933,8 +933,8 @@ static void test_aary_dup_set_remove2() {
 /*************************/
 int run_atomic_array_h_test_suite() {
     int r;
-    void (*void_tests[])() = { test_aary_new, NULL };
-    char *void_test_names[] = { "aary_new", NULL };
+    void (*void_tests[])() = { test_aary_create, NULL };
+    char *void_test_names[] = { "aary_create", NULL };
     r = run_test_suite(NULL, void_test_names, void_tests);
     if(r != 0) {
     	return r;

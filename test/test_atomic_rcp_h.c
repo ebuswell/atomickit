@@ -46,12 +46,23 @@ static struct {
 static bool region1_destroyed;
 static bool region2_destroyed;
 
+static bool weakref1_destroyed;
+static bool weakref2_destroyed;
+
 static void destroy_region1(struct arcp_region *region __attribute__((unused))) {
     region1_destroyed = true;
 }
 
 static void destroy_region2(struct arcp_region *region __attribute__((unused))) {
     region2_destroyed = true;
+}
+
+static void destroy_weakref1(struct arcp_region *region __attribute__((unused))) {
+    weakref1_destroyed = true;
+}
+
+static void destroy_weakref2(struct arcp_region *region __attribute__((unused))) {
+    weakref2_destroyed = true;
 }
 
 static arcp_t arcp;
@@ -118,72 +129,104 @@ static void test_arcp_acquire() {
     ASSERT(!region1_destroyed);
 }
 
-static void test_arcp_acquire_weak_stub() {
+static void test_arcp_region_init_weakref() {
+    int r;
     CHECKPOINT();
-    struct arcp_weak_stub *stub = arcp_acquire_weak_stub(region1);
-    ASSERT(stub != NULL);
-    struct arcp_weak_stub *stub2 = arcp_acquire_weak_stub(region1);
-    ASSERT(stub2 != NULL);
-    ASSERT(stub == stub2);
-    ASSERT(arcp_refcount(region1) == 1);
-    ASSERT(arcp_ptrcount(region1) == 0);
-    ASSERT(!region1_destroyed);
-    ASSERT(arcp_refcount(stub) == 2);
-    ASSERT(arcp_ptrcount(stub) == 1);
-    arcp_release(stub2);
-    ASSERT(arcp_refcount(stub) == 1);
-    ASSERT(arcp_ptrcount(stub) == 1);
-    CHECKPOINT();
-    arcp_release(region1);
-    ASSERT(region1_destroyed);
-    ASSERT(arcp_refcount(stub) == 1);
-    ASSERT(arcp_ptrcount(stub) == 0);
-    arcp_release(stub);
+    r = arcp_region_init_weakref(region1);
+    ASSERT(r == 0);
+    struct arcp_weakref *weakref = arcp_weakref_phantom(region1);
+    ASSERT(weakref != NULL);
+    ASSERT(arcp_refcount(weakref) == 0);
+    ASSERT(arcp_ptrcount(weakref) == 1);
+    struct arcp_region *rg = arcp_weakref_load(weakref);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
+    arcp_region_destroy_weakref(region1);
 }
 
-static void test_arcp_weak_acquire() {
+/****************************/
+static void test_arcp_init_weakref_fixture(void (*test)()) {
+    region1_destroyed = false;
+    region2_destroyed = false;
+    weakref1_destroyed = false;
+    weakref2_destroyed = false;
+    region1 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    region2 = alloca(ARCP_REGION_OVERHEAD + strlen(strtest.string1) + 1);
+    strcpy((char *) ARCP_REGION2DATA(region1), strtest.string1);
+    strcpy((char *) ARCP_REGION2DATA(region2), strtest.string2);
     CHECKPOINT();
-    struct arcp_weak_stub *stub = arcp_acquire_weak_stub(region1);
-    ASSERT(stub != NULL);
-    struct arcp_region *rg = arcp_weak_acquire(stub);
+    arcp_region_init(region1, destroy_region1);
+    CHECKPOINT();
+    arcp_region_init(region2, destroy_region2);
+    CHECKPOINT();
+    struct arcp_weakref *weakref1 = alloca(sizeof(struct arcp_weakref));
+    struct arcp_weakref *weakref2 = alloca(sizeof(struct arcp_weakref));
+    CHECKPOINT();
+    atomic_ptr_init(&weakref1->ptr, region1);
+    CHECKPOINT();
+    atomic_ptr_init(&weakref2->ptr, region2);
+    CHECKPOINT();
+    arcp_region_init(weakref1, destroy_weakref1);
+    CHECKPOINT();
+    arcp_region_init(weakref2, destroy_weakref2);
+    CHECKPOINT();
+    arcp_store(&region1->weakref, weakref1);
+    CHECKPOINT();
+    arcp_store(&region2->weakref, weakref2);
+    CHECKPOINT();
+    arcp_release(weakref1);
+    CHECKPOINT();
+    arcp_release(weakref2);
+    CHECKPOINT();
+    test();
+}
+
+static void test_arcp_region_destroy_weakref() {
+    CHECKPOINT();
+    arcp_region_destroy_weakref(region1);
+    ASSERT(weakref1_destroyed);
+}
+
+static void test_arcp_weakref() {
+    CHECKPOINT();
+    struct arcp_weakref *weakref = arcp_weakref(region1);
+    ASSERT(weakref != NULL);
+    ASSERT(arcp_refcount(weakref) == 1);
+    ASSERT(arcp_ptrcount(weakref) == 1);
+    ASSERT(!weakref1_destroyed);
+    struct arcp_region *rg = arcp_weakref_load(weakref);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
+}
+
+static void test_arcp_weakref_phantom() {
+    CHECKPOINT();
+    struct arcp_weakref *weakref = arcp_weakref_phantom(region1);
+    ASSERT(weakref != NULL);
+    ASSERT(arcp_refcount(weakref) == 0);
+    ASSERT(arcp_ptrcount(weakref) == 1);
+    ASSERT(!weakref1_destroyed);
+    struct arcp_region *rg = arcp_weakref_load(weakref);
+    ASSERT(rg == region1);
+    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
+}
+
+static void test_arcp_weakref_load() {
+    CHECKPOINT();
+    struct arcp_region *rg = arcp_weakref_load(arcp_weakref_phantom(region1));
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(arcp_refcount(region1) == 2);
     ASSERT(arcp_ptrcount(region1) == 0);
     ASSERT(!region1_destroyed);
-    arcp_release(rg);
-    arcp_release(region1);
-    ASSERT(region1_destroyed);
-    rg = arcp_weak_acquire(stub);
-    ASSERT(rg == NULL);
-    ASSERT(arcp_refcount(stub) == 1);
-    ASSERT(arcp_ptrcount(stub) == 0);
-    arcp_release(stub);
+    ASSERT(!weakref1_destroyed);
 }
 
-static void test_arcp_weak_load() {
+static void test_arcp_release_with_weakref() {
     CHECKPOINT();
-    struct arcp_weak_stub *stub = arcp_acquire_weak_stub(region1);
-    ASSERT(stub != NULL);
-    arcp_init(&arcp, stub);
-    CHECKPOINT();
-    arcp_release(stub);
-    ASSERT(arcp_refcount(stub) == 0);
-    ASSERT(arcp_ptrcount(stub) == 2);
-    struct arcp_region *rg = arcp_weak_load(&arcp);
-    ASSERT(rg == region1);
-    ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
-    ASSERT(arcp_refcount(region1) == 2);
-    ASSERT(arcp_ptrcount(region1) == 0);
-    ASSERT(!region1_destroyed);
-    arcp_release(rg);
     arcp_release(region1);
     ASSERT(region1_destroyed);
-    rg = arcp_weak_load(&arcp);
-    ASSERT(rg == NULL);
-    ASSERT(arcp_refcount(stub) == 0);
-    ASSERT(arcp_ptrcount(stub) == 1);
-    arcp_store(&arcp, NULL);
+    ASSERT(weakref1_destroyed);
 }
 
 /****************************/
@@ -366,12 +409,21 @@ int run_atomic_rcp_h_test_suite() {
     }
 
     void (*arcp_init_region_tests[])() = { test_arcp_init, test_arcp_acquire,
-					   test_arcp_acquire_weak_stub, test_arcp_weak_acquire,
-					   test_arcp_weak_load, NULL };
+					   test_arcp_region_init_weakref, NULL };
     char *arcp_init_region_test_names[] = { "arcp_init", "arcp_acquire",
-					    "arcp_acquire_weak_stub", "arcp_weak_acquire",
-					    "arcp_weak_load", NULL };
+					    "arcp_region_init_weakref", NULL };
     r = run_test_suite(test_arcp_init_region_fixture, arcp_init_region_test_names, arcp_init_region_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    void (*arcp_init_weakref_tests[])() = { test_arcp_region_destroy_weakref, test_arcp_weakref,
+					    test_arcp_weakref_phantom, test_arcp_weakref_load,
+					    test_arcp_release_with_weakref, NULL };
+    char *arcp_init_weakref_test_names[] = { "arcp_region_destroy_weakref", "arcp_weakref",
+					     "arcp_weakref_phantom", "arcp_weakref_load",
+					     "arcp_release_with_weakref", NULL };
+    r = run_test_suite(test_arcp_init_weakref_fixture, arcp_init_weakref_test_names, arcp_init_weakref_tests);
     if(r != 0) {
 	return r;
     }

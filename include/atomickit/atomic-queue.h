@@ -50,7 +50,7 @@ typedef struct {
     arcp_t tail;
 } aqueue_t;
 
-#define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item) { ARCP_REGION_VAR_INIT(ptrcount, refcount, NULL), ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
+#define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item) { ARCP_REGION_VAR_INIT(ptrcount, refcount, NULL, NULL), ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
 
 #define AQUEUE_SENTINEL_VAR_INIT(ptrcount, refcount, next) AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, NULL)
 

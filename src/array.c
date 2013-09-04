@@ -45,7 +45,7 @@ struct aary *aary_dup(struct aary *array) {
     return ret;
 }
 
-struct aary *aary_new(size_t length) {
+struct aary *aary_create(size_t length) {
     struct aary *ret = amalloc(AARY_SIZE(length));
     if(ret == NULL) {
 	return NULL;

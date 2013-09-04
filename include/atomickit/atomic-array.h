@@ -39,7 +39,7 @@ struct aary {
 #define AARY_SIZE(n) (AARY_OVERHEAD + sizeof(struct arcp_region *) * n)
 
 struct aary *aary_dup(struct aary *array);
-struct aary *aary_new(size_t length);
+struct aary *aary_create(size_t length);
 
 static inline size_t aary_length(struct aary *array) {
     return array->length;

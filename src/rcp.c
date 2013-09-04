@@ -25,7 +25,35 @@
 #include "atomickit/atomic-malloc.h"
 #include "atomickit/atomic-rcp.h"
 
-static inline bool __arcp_try_release_destroy_lock(struct arcp_region *region) {
+static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptrcount, int16_t refcount) {
+    union {
+	uint_fast32_t v;
+	struct {
+	    int16_t first;
+	    int16_t second;
+	} s;
+    } count;
+    uint_fast32_t o_count = atomic_load_explicit(&region->refcount, memory_order_consume);
+    uint_fast32_t ret;
+    do {
+	count.v = o_count;
+	if(__ARCP_LITTLE_ENDIAN) {
+	    count.s.first += refcount;
+	    count.s.second += ptrcount;
+	} else {
+	    count.s.first += ptrcount;
+	    count.s.second += refcount;
+	}
+	ret = count.v;
+	if(count.v == 0) {
+	    count.v |= __ARCP_DESTROY_LOCK_BIT;
+	}
+    } while(unlikely(!atomic_compare_exchange_weak_explicit(&region->refcount, &o_count, count.v,
+							    memory_order_acq_rel, memory_order_consume)));
+    return ret;
+}
+
+static bool __arcp_try_release_destroy_lock(struct arcp_region *region) {
     uint_fast32_t count = atomic_load_explicit(&region->refcount, memory_order_consume);
     do {
 	if(count == __ARCP_DESTROY_LOCK_BIT) {
@@ -37,7 +65,7 @@ static inline bool __arcp_try_release_destroy_lock(struct arcp_region *region) {
 }
 
 static void __arcp_try_destroy(struct arcp_region *region) {
-    struct arcp_weak_stub *stub = (struct arcp_weak_stub *) arcp_load(&region->weak_stub);
+    struct arcp_weakref *stub = (struct arcp_weakref *) arcp_load(&region->weakref);
     if(stub == NULL) {
 	if(region->destroy != NULL) {
 	    region->destroy(region);
@@ -80,16 +108,44 @@ retry:
 	    goto retry;
 	}
     }
-    arcp_store(&region->weak_stub, NULL);
     if(region->destroy != NULL) {
 	region->destroy(region);
     }
+    arcp_store(&region->weakref, NULL);
 abort:
     arcp_release(stub);
 }
 
-static void __arcp_destroy_weak_stub(struct arcp_weak_stub *stub) {
-    afree(stub, sizeof(struct arcp_weak_stub));
+static void __arcp_destroy_weakref(struct arcp_weakref *stub) {
+    afree(stub, sizeof(struct arcp_weakref));
+}
+
+void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *)) {
+    atomic_init(&region->refcount, 1);
+    region->destroy = destroy;
+    arcp_init(&region->weakref, NULL);
+}
+
+int arcp_region_init_weakref(struct arcp_region *region) {
+    if(region == NULL) {
+	return 0;
+    }
+    struct arcp_weakref *stub = (struct arcp_weakref *) arcp_load_phantom(&region->weakref);
+    if(stub != NULL) {
+	return 0;
+    }
+    stub = amalloc(sizeof(struct arcp_weakref));
+    if(stub == NULL) {
+	return -1;
+    }
+    atomic_ptr_init(&stub->ptr, region);
+    arcp_region_init(stub, (void (*)(struct arcp_region *)) __arcp_destroy_weakref);
+    arcp_compare_store_release(&region->weakref, NULL, stub);
+    return 0;
+}
+
+void arcp_region_destroy_weakref(struct arcp_region *region) {
+    arcp_store(&region->weakref, NULL);
 }
 
 struct arcp_region *arcp_acquire(struct arcp_region *region) {
@@ -97,6 +153,10 @@ struct arcp_region *arcp_acquire(struct arcp_region *region) {
 	__arcp_urefs(region, 0, 1);
     }
     return region;
+}
+
+struct arcp_weakref *arcp_weakref(struct arcp_region *region) {
+    return (struct arcp_weakref *) arcp_load(&region->weakref);
 }
 
 void arcp_release(struct arcp_region *region) {
@@ -107,30 +167,11 @@ void arcp_release(struct arcp_region *region) {
     }
 }
 
-struct arcp_weak_stub *arcp_acquire_weak_stub(struct arcp_region *region) {
-    if(region == NULL) {
+struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
+    if(weakref == NULL) {
 	return NULL;
     }
-    struct arcp_weak_stub *stub = (struct arcp_weak_stub *) arcp_load(&region->weak_stub);
-    if(stub != NULL) {
-	return stub;
-    }
-    stub = amalloc(sizeof(struct arcp_weak_stub));
-    if(stub == NULL) {
-	return NULL;
-    }
-    atomic_ptr_init(&stub->ptr, region);
-    arcp_region_init(stub, (void (*)(struct arcp_region *)) __arcp_destroy_weak_stub);
-    if(likely(arcp_compare_store(&region->weak_stub, NULL, stub))) {
-	return stub;
-    } else {
-	afree(stub, sizeof(struct arcp_weak_stub));
-	return (struct arcp_weak_stub *) arcp_load(&region->weak_stub);
-    }
-}
-
-struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub) {
-    void *ptr = atomic_ptr_load_explicit(&stub->ptr, memory_order_consume);
+    void *ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
     void *desired;
     do {
     retry:
@@ -138,7 +179,7 @@ struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub) {
 	case __ARCP_COUNTMASK - 1:
 	    /* Spinlock if too many threads are accessing this at once. */
 	    cpu_relax();
-	    ptr = atomic_ptr_load_explicit(&stub->ptr, memory_order_consume);
+	    ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
 	    goto retry;
 	case __ARCP_COUNTMASK:
 	    desired = __ARCP_PTRDECOUNT(ptr) + 1;
@@ -146,7 +187,7 @@ struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub) {
 	default:
 	    desired = ptr + 1;
 	}
-    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&stub->ptr, &ptr, desired,
+    } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&weakref->ptr, &ptr, desired,
 								memory_order_acq_rel, memory_order_consume)));
     ptr = desired;
     /* We have one reference */
@@ -155,7 +196,7 @@ struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub) {
 	__arcp_urefs(ret, 0, 1);
     }
     /* We have two references, try and remove the one stored on the pointer. */
-    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&stub->ptr, &ptr, ptr - 1,
+    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&weakref->ptr, &ptr, ptr - 1,
 							      memory_order_acq_rel, memory_order_consume))) {
 	/* Is the pointer still valid? */
 	if((__ARCP_PTRDECOUNT(ptr) != ret)
@@ -172,14 +213,17 @@ struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub) {
     return ret;
 }
 
-struct arcp_region *arcp_weak_load(arcp_t *rcp) {
-    struct arcp_weak_stub *stub = (struct arcp_weak_stub *) arcp_load(rcp);
-    if(stub == NULL) {
-	return NULL;
-    }
-    struct arcp_region *ret = arcp_weak_acquire(stub);
-    arcp_release(stub);
+struct arcp_region *arcp_weakref_load_release(struct arcp_weakref *weakref) {
+    struct arcp_region *ret = arcp_weakref_load(weakref);
+    arcp_release(weakref);
     return ret;
+}
+
+void arcp_init(arcp_t *rcp, struct arcp_region *region) {
+    if(region != NULL) {
+	__arcp_urefs(region, 1, 0);
+    }
+    atomic_ptr_store_explicit(&rcp->ptr, region, memory_order_release);
 }
 
 struct arcp_region *arcp_load(arcp_t *rcp) {
@@ -291,3 +335,4 @@ bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *oldregion, stru
     }
     return true;
 }
+

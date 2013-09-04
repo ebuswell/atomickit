@@ -49,8 +49,6 @@ typedef struct {
 
 struct arcp_region;
 
-struct arcp_weak_stub;
-
 /**
  * Atomic Reference Counted Region
  *
@@ -69,18 +67,18 @@ struct arcp_region {
 				    * referenced; low 16 bits, the
 				    * number of individual references
 				    * to this region. */
-    arcp_t weak_stub; /** Pointer to the weak stub for this region;
-		       * initially NULL. */
+    arcp_t weakref; /** Pointer to the weak reference for this region;
+		     * initially NULL. */
 } __attribute__((aligned(16)));
 
 /**
- * Weak Stub for Atomic Reference Counted Region
+ * Weak Reference for an Atomic Reference Counted Region
  *
- * A weak stub contains a weak reference to an `arcp_region` that may
- * be turned into a strong reference.  It is itself an `arcp_region`
- * and can/should be stored in `arcp_t` containers.
+ * A weak reference is a reference to an `arcp_region` that may be
+ * turned into a strong reference.  It is itself an `arcp_region` and
+ * can/should be stored in `arcp_t` containers.
  */
-struct arcp_weak_stub {
+struct arcp_weakref {
     struct arcp_region;
     atomic_ptr ptr;
 };
@@ -135,7 +133,12 @@ struct __arcp_region_data {
 /**
  * Initialization value for `struct arcp_region`.
  */
-#define ARCP_REGION_VAR_INIT(ptrcount, refcount, destroy) { destroy, ATOMIC_VAR_INIT((ptrcount << 16) | refcount), ARCP_VAR_INIT(NULL) }
+#define ARCP_REGION_VAR_INIT(ptrcount, refcount, destroy, weakref) { destroy, ATOMIC_VAR_INIT((ptrcount << 16) | refcount), ARCP_VAR_INIT(weakref) }
+
+/**
+ * Initialization value for `struct arcp_weakref`.
+ */
+#define ARCP_WEAKREF_VAR_INIT(ptrcount, refcount, destroy, ptr) { ARCP_REGION_VAR_INIT(ptrcount, refcount, destroy, NULL), ARCP_VAR_INIT(ptr) }
 
 #define __ARCP_LITTLE_ENDIAN (((union {		\
 		    uint_fast32_t v;		\
@@ -146,34 +149,6 @@ struct __arcp_region_data {
     }) { 1 }).s.first)
 
 #define __ARCP_DESTROY_LOCK_BIT ((uint_fast32_t) (1 << 31))
-
-static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptrcount, int16_t refcount) {
-    union {
-	uint_fast32_t v;
-	struct {
-	    int16_t first;
-	    int16_t second;
-	} s;
-    } count;
-    uint_fast32_t o_count = atomic_load_explicit(&region->refcount, memory_order_consume);
-    uint_fast32_t ret;
-    do {
-	count.v = o_count;
-	if(__ARCP_LITTLE_ENDIAN) {
-	    count.s.first += refcount;
-	    count.s.second += ptrcount;
-	} else {
-	    count.s.first += ptrcount;
-	    count.s.second += refcount;
-	}
-	ret = count.v;
-	if(count.v == 0) {
-	    count.v |= __ARCP_DESTROY_LOCK_BIT;
-	}
-    } while(unlikely(!atomic_compare_exchange_weak_explicit(&region->refcount, &o_count, count.v,
-							    memory_order_acq_rel, memory_order_consume)));
-    return ret;
-}
 
 /**
  * Initializes a reference counted region.
@@ -188,7 +163,27 @@ static inline uint_fast32_t __arcp_urefs(struct arcp_region *region, int16_t ptr
  * once it is no longer in use.  If no cleanup is needed, this could
  * just be a simple wrapper around `afree`.
  */
-static inline void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *));
+void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *));
+
+/**
+ * Initializes the weak reference for a reference counted region.
+ *
+ * @param region a pointer to a reference counted region.
+ *
+ * @returns zero on success, nonzero on failure.
+ */
+int arcp_region_init_weakref(struct arcp_region *region);
+
+/**
+ * Destroys the weak reference for a reference counted region.
+ *
+ * This is automatically called when applicable after the user
+ * destruction function, but is still provided for when deleting a
+ * region by a custom mechanism.
+ *
+ * @param region a pointer to a reference counted region.
+ */
+void arcp_region_destroy_weakref(struct arcp_region *region);
 
 /**
  * Returns the current reference count of the region.
@@ -222,6 +217,28 @@ static inline int arcp_ptrcount(struct arcp_region *region);
 struct arcp_region *arcp_acquire(struct arcp_region *region);
 
 /**
+ * Returns a weak reference to this region.
+ *
+ * You must call `arcp_region_init_weakref` before this.
+ *
+ * @param region the region to which to return a weak reference.
+ *
+ * @returns a weak reference to this region.
+ */
+struct arcp_weakref *arcp_weakref(struct arcp_region *region);
+
+/**
+ * Returns a weak reference to this region.
+ *
+ * You must call `arcp_region_init_weakref` before this.
+ *
+ * @param region the region to which to return a weak reference.
+ *
+ * @returns a weak reference to this region.
+ */
+static inline struct arcp_weakref *arcp_weakref_phantom(struct arcp_region *region);
+
+/**
  * Releases a reference to a reference counted region.
  *
  * @param region the region to release a reference to.
@@ -229,38 +246,16 @@ struct arcp_region *arcp_acquire(struct arcp_region *region);
 void arcp_release(struct arcp_region *region);
 
 /**
- * Acquires the weak stub referencing a given arcp_region, creating if
- * necessary.
+ * Loads the item to which the weak reference refers.
  *
- * One must hold a (strong) reference to the arcp_region in order to
- * call this function.
+ * @param weakref the weak reference for which to load the item.
  *
- * @param region the region for which to acquire a weak stub
- *
- * @returns the weak stub corresponding to this region, or NULL if an
- * error occurred, or if the region was originally NULL.
+ * @returns the item to which the weak reference refers, or NULL if
+ * the item has been destroyed.
  */
-struct arcp_weak_stub *arcp_acquire_weak_stub(struct arcp_region *region);
+struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref);
 
-/**
- * Acquires a strong reference to the region weakly referenced by a
- * weak stub.
- *
- * @param stub the stub from which to load the region.
- *
- * @returns the enclosed region or NULL if the region has been destroyed.
- */
-struct arcp_region *arcp_weak_acquire(struct arcp_weak_stub *stub);
-
-/**
- * Acquires a strong reference to a region whose weak stub is
- * currently stored in a reference counted pointer.
- *
- * @param rcp the reference counted pointer in which the weak reference is stored.
- *
- * @returns the referenced region or NULL if the region has been destroyed.
- */
-struct arcp_region *arcp_weak_load(arcp_t *rcp);
+struct arcp_region *arcp_weakref_load_release(struct arcp_weakref *weakref);
 
 /**
  * Initializes a reference counted pointer.
@@ -270,7 +265,7 @@ struct arcp_region *arcp_weak_load(arcp_t *rcp);
  * @param region initial contents of the pointer. This should be a
  * pointer to an initialized `arcp_region`, or `NULL`.
  */
-static inline void arcp_init(arcp_t *rcp, struct arcp_region *region);
+void arcp_init(arcp_t *rcp, struct arcp_region *region);
 
 /**
  * Store a new region as the content of the reference counted pointer.
@@ -281,8 +276,23 @@ static inline void arcp_init(arcp_t *rcp, struct arcp_region *region);
  *
  * @param rcp the pointer for which to commit the new content.
  * @param region the new content of the pointer.
+ *
+ * @returns zero on success, nonzero on failure.
  */
 void arcp_store(arcp_t *rcp, struct arcp_region *region);
+
+/**
+ * Store a weak reference to a region as the content of the regerence
+ * counted pointer.
+ *
+ * The caller's references are untouched, so call
+ * `arcp_region_release()` on newregion if you no longer intend to
+ * reference it.
+ *
+ * @param rcp the pointer for which to commit the new content.
+ * @param region the region to store the weak reference to.
+ */
+void arcp_store_weak(arcp_t *rcp, struct arcp_region *region);
 
 /**
  * Acquire a reference counted pointer's contents.
@@ -305,6 +315,16 @@ struct arcp_region *arcp_load(arcp_t *rcp);
 static inline struct arcp_region *arcp_load_phantom(arcp_t *rcp);
 
 /**
+ * Acquires a strong reference to a region whose weak stub is
+ * currently stored in a reference counted pointer.
+ *
+ * @param rcp the reference counted pointer in which the weak reference is stored.
+ *
+ * @returns the referenced region or NULL if the region has been destroyed.
+ */
+struct arcp_region *arcp_load_weak(arcp_t *rcp);
+
+/**
  * Exchange a new region with the content of the reference counted
  * pointer.
  *
@@ -319,6 +339,23 @@ static inline struct arcp_region *arcp_load_phantom(arcp_t *rcp);
  * @returns the old contents of rcp.
  */
 struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region *region);
+
+/**
+ * Atomically store a weak reference for a pointer while acquiring a
+ * strong reference to the previous contents.
+ *
+ * This is unconditional and should only be used in special
+ * circumstances. The caller's references are untouched, so call
+ * `arcp_region_release()` on newregion if you no longer intend to
+ * reference it.
+ *
+ * @param rcp the pointer for which to commit the new content.
+ * @param region the new content of the transaction.
+ *
+ * @returns a strong reference to the old contents of rcp, or NULL on
+ * error.
+ */
+struct arcp_region *arcp_exchange_weak(arcp_t *rcp, struct arcp_region *region);
 
 /**
  * Compare the content of the reference counted pointer with
@@ -340,13 +377,11 @@ struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region *region);
  */
 bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion);
 
+bool arcp_compare_store_weak(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion);
+
 bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion);
 
-static inline void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *)) {
-    atomic_init(&region->refcount, 1);
-    region->destroy = destroy;
-    arcp_init(&region->weak_stub, NULL);
-}
+bool arcp_compare_store_release_weak(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion);
 
 static inline int arcp_refcount(struct arcp_region *region) {
     union {
@@ -380,11 +415,8 @@ static inline int arcp_ptrcount(struct arcp_region *region) {
     }
 }
 
-static inline void arcp_init(arcp_t *rcp, struct arcp_region *region) {
-    if(region != NULL) {
-	__arcp_urefs(region, 1, 0);
-    }
-    atomic_ptr_store_explicit(&rcp->ptr, region, memory_order_release);
+static inline struct arcp_weakref *arcp_weakref_phantom(struct arcp_region *region) {
+    return region == NULL ? NULL : (struct arcp_weakref *) arcp_load_phantom(&region->weakref);
 }
 
 static inline struct arcp_region *arcp_load_phantom(arcp_t *rcp) {
