@@ -39,9 +39,9 @@ void *alloca(size_t);
 #include "test.h"
 
 static struct {
-    char __attribute__((aligned(8))) string1[14];
-    char __attribute__((aligned(8))) string2[14];
-    char __attribute__((aligned(8))) string3[14];
+    char string1[14];
+    char string2[14];
+    char string3[14];
 } ptrtest = { "Test String 1", "Test String 2", "Test String 3" };
 
 static bool region1_destroyed;
@@ -155,9 +155,9 @@ static void test_atxn_load1() {
     ASSERT(!region1_destroyed);
 }
 
-static void test_atxn_load_weak1() {
+static void test_atxn_load_phantom1() {
     CHECKPOINT();
-    struct arcp_region *rg1 = atxn_load_weak1(&atxn1);
+    struct arcp_region *rg1 = atxn_load_phantom1(&atxn1);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
@@ -434,10 +434,10 @@ int run_atomic_txn_h_test_suite() {
     	return r;
     }
 
-    void (*init_tests[])() = { test_atxn_destroy, test_atxn_load1, test_atxn_load_weak1,
+    void (*init_tests[])() = { test_atxn_destroy, test_atxn_load1, test_atxn_load_phantom1,
     			       test_atxn_release1, test_atxn_start,
     			       NULL };
-    char *init_test_names[] = { "atxn_destroy", "atxn_load1", "atxn_load_weak1",
+    char *init_test_names[] = { "atxn_destroy", "atxn_load1", "atxn_load_phantom1",
     				"atxn_release1", "atxn_start",
     				NULL };
     r = run_test_suite(test_atxn_init_fixture, init_test_names, init_tests);

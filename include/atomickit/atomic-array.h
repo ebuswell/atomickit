@@ -1,4 +1,4 @@
-/**
+/** @file atomic-array.h
  * Atomic Array
  *
  * A copy-on-write array that can be used as a list or a set
@@ -49,7 +49,7 @@ static inline struct arcp_region *aary_load(struct aary *array, size_t i) {
     return arcp_acquire(array->items[i]);
 }
 
-static inline struct arcp_region *aary_load_weak(struct aary *array, size_t i) {
+static inline struct arcp_region *aary_load_phantom(struct aary *array, size_t i) {
     return array->items[i];
 }
 
@@ -57,7 +57,7 @@ static inline struct arcp_region *aary_last(struct aary *array) {
     return arcp_acquire(array->items[array->length - 1]);
 }
 
-static inline struct arcp_region *aary_last_weak(struct aary *array) {
+static inline struct arcp_region *aary_last_phantom(struct aary *array) {
     return array->items[array->length - 1];
 }
 
@@ -65,7 +65,7 @@ static inline struct arcp_region *aary_first(struct aary *array) {
     return arcp_acquire(array->items[0]);
 }
 
-static inline struct arcp_region *aary_first_weak(struct aary *array) {
+static inline struct arcp_region *aary_first_phantom(struct aary *array) {
     return array->items[0];
 }
 

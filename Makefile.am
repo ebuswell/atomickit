@@ -21,7 +21,7 @@ EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign serial-tests subdir-objects
 
 lib_LTLIBRARIES = libatomickit.la
-libatomickit_la_SOURCES = src/queue.c src/malloc.c src/txn.c src/array.c
+libatomickit_la_SOURCES = src/rcp.c src/queue.c src/malloc.c src/txn.c src/array.c
 libatomickit_la_LDFLAGS = $(LDFLAGS) -L$(libdir) -export-dynamic -version_info @VERSION_INFO@
 libatomickit_la_CFLAGS = $(CFLAGS) -fplan9-extensions -Og -g3 -Wall -Wextra -Wmissing-prototypes -Wredundant-decls -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)

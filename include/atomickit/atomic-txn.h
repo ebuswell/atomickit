@@ -140,9 +140,7 @@ int atxn_init(atxn_t *txn, struct arcp_region *region);
  *
  * @param txn the transaction container to destroy.
  */
-static inline void atxn_destroy(atxn_t *txn) {
-    arcp_store(&txn->rcp, NULL);
-}
+void atxn_destroy(atxn_t *txn);
 
 /**
  * Load the contents of an atxn outside of the context of an open
@@ -164,7 +162,7 @@ struct arcp_region *atxn_load1(atxn_t *txn);
  *
  * @returns pointer to the contents of this item.
  */
-struct arcp_region *atxn_load_weak1(atxn_t *txn);
+struct arcp_region *atxn_load_phantom1(atxn_t *txn);
 
 /**
  * Release a pointer acquired with atxn_load1. Convenience
@@ -178,9 +176,7 @@ struct arcp_region *atxn_load_weak1(atxn_t *txn);
  * @param ptr pointer to the memory region for a particular
  * transaction item.
  */
-static inline void atxn_release1(struct arcp_region *region) {
-    arcp_release(region);
-}
+#define atxn_release1 arcp_release
 
 /**
  * Open a transaction and return a handle to that transaction.
@@ -195,9 +191,7 @@ struct atxn_handle *atxn_start(void);
  * @param handle a pointer to the handle of the transaction to abort
  * and close.
  */
-static inline void atxn_abort(struct atxn_handle *handle) {
-    arcp_release(handle);
-}
+#define atxn_abort arcp_release
 
 /**
  * Get the status of an open transaction.
@@ -209,9 +203,7 @@ static inline void atxn_abort(struct atxn_handle *handle) {
  * @param handle a pointer to the handle of the transaction to get the
  * status of.
  */
-static inline enum atxn_status atxn_status(struct atxn_handle *handle) {
-    return (enum atxn_status) atomic_load_explicit(&handle->status, memory_order_acquire);
-}
+static inline enum atxn_status atxn_status(struct atxn_handle *handle);
 
 /**
  * Acquire a value within an open transaction.
@@ -262,5 +254,9 @@ enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp
  * @returns the final status of the transaction.
  */
 enum atxn_status atxn_commit(struct atxn_handle *handle);
+
+static inline enum atxn_status atxn_status(struct atxn_handle *handle) {
+    return (enum atxn_status) atomic_load_explicit(&handle->status, memory_order_acquire);
+}
 
 #endif /* ! ATOMICKIT_ATOMIC_TXN_H */

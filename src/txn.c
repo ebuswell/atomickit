@@ -1,3 +1,22 @@
+/*
+ * txn.c
+ *
+ * Copyright 2013 Evan Buswell
+ * 
+ * This file is part of Atomic Kit.
+ * 
+ * Atomic Kit is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published
+ * by the Free Software Foundation, version 2.
+ * 
+ * Atomic Kit is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+ */
 #include "atomickit/atomic.h"
 #include "atomickit/atomic-rcp.h"
 #include "atomickit/atomic-malloc.h"
@@ -36,6 +55,10 @@ int atxn_init(atxn_t *txn, struct arcp_region *region) {
     return 0;
 }
 
+void atxn_destroy(atxn_t *txn) {
+    arcp_store(&txn->rcp, NULL);
+}
+
 struct arcp_region *atxn_load1(atxn_t *txn) {
     unsigned int clock;
     struct atxn_stub *stub;
@@ -67,7 +90,7 @@ struct arcp_region *atxn_load1(atxn_t *txn) {
     return ret;
 }
 
-struct arcp_region *atxn_load_weak1(atxn_t *txn) {
+struct arcp_region *atxn_load_phantom1(atxn_t *txn) {
     unsigned int clock;
     struct atxn_stub *stub;
     struct arcp_region *ret;
@@ -75,14 +98,14 @@ struct arcp_region *atxn_load_weak1(atxn_t *txn) {
     clock = atomic_load_explicit(&atxn_clock, memory_order_acquire);
     if(atomic_load_explicit(&stub->clock, memory_order_acquire) == clock) {
 	/* Load previous value */
-	ret = arcp_load_weak(&stub->prev);
+	ret = arcp_load_phantom(&stub->prev);
 	if(clock != atomic_load(&atxn_clock)) { /* Memory barrier */
 	    /* Counter changed; return current value */
-	    ret = arcp_load_weak(&stub->value);
+	    ret = arcp_load_phantom(&stub->value);
 	}
     } else {
 	/* Load current value */
-	ret = arcp_load_weak(&stub->value);
+	ret = arcp_load_phantom(&stub->value);
     }
     arcp_release(stub);
     return ret;
@@ -211,7 +234,7 @@ enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_
     /* Check update list */
     struct atxn_update *update_list = handle->update_list;
     IF_BSEARCH(update_list, handle->nupdates, txn, i) {
-	*region = arcp_load_weak(&update_list[i].stub->value);
+	*region = arcp_load_phantom(&update_list[i].stub->value);
 	return ATXN_SUCCESS;
     } ENDIF_BSEARCH;
     /* Check check list */
@@ -229,7 +252,7 @@ enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_
     size_t nchecks = handle->nchecks;
     size_t j;
     for(j = 0; j < nchecks; j++) {
-	if(atxn_load_weak1(check_list[j].location) != check_list[j].value) {
+	if(atxn_load_phantom1(check_list[j].location) != check_list[j].value) {
 	    atomic_store_explicit(&handle->status, ATXN_FAILURE, memory_order_relaxed);
 	    atxn_release1(*region);
 	    return ATXN_FAILURE;
@@ -338,7 +361,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			    break;
 			}
 			/* Do the check */
-			if(arcp_load_weak(&stub->value) != next->check_list[j].value) {
+			if(arcp_load_phantom(&stub->value) != next->check_list[j].value) {
 			    /* Something changed; transaction failed */
 			    atomic_store_explicit(&next->status, ATXN_FAILURE, memory_order_release);
 			    procstatus = (unsigned long) -1L;
@@ -385,7 +408,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			break;
 		    }
 		    /* Get old value and store it in previous */
-		    struct arcp_region *oldvalue = arcp_load_weak(&oldstub->value);
+		    struct arcp_region *oldvalue = arcp_load_phantom(&oldstub->value);
 		    arcp_store(&next->update_list[j].stub->prev, oldvalue);
 		    /* Store clock value */
 		    atomic_store_explicit(&next->update_list[j].stub->clock, clock, memory_order_release);

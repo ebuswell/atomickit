@@ -40,8 +40,8 @@ void *alloca(size_t);
 #include "test.h"
 
 static struct {
-    char __attribute__((aligned(8))) string1[14];
-    char __attribute__((aligned(8))) string2[14];
+    char string1[14];
+    char string2[14];
 } ptrtest = { "Test String 1", "Test String 2" };
 
 static bool region1_destroyed;

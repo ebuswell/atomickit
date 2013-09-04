@@ -25,7 +25,7 @@
 
 #define NSIZES 8
 
-void *regions[NSIZES + 1];
+static void *regions[NSIZES + 1];
 
 /*************************/
 static void test_amalloc() {
