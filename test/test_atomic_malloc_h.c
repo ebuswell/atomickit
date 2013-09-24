@@ -23,16 +23,19 @@
 #include "alltests.h"
 #include "test.h"
 
-#define NSIZES 8
+#define NSIZES 10
+#define OS_THRESH 8192
 
 static void *regions[NSIZES + 1];
+
+#define REGION_SIZE(i) (16 * (2 << (i)) - 8)
 
 /*************************/
 static void test_amalloc() {
     int i;
     CHECKPOINT();
     for(i = 0; i < NSIZES; i++) {
-	regions[i] = amalloc(12 * (2 << i));
+	regions[i] = amalloc(REGION_SIZE(i));
 	ASSERT(regions[i] != NULL);
     }
     for(i = 0; i < NSIZES; i++) {
@@ -45,11 +48,11 @@ static void test_amalloc() {
     }
     CHECKPOINT();
     for(i = 0; i < NSIZES; i++) {
-	afree(regions[i], 12 * (2 << i));
+	afree(regions[i], REGION_SIZE(i));
     }
     CHECKPOINT();
     for(i = 0; i < NSIZES; i++) {
-	regions[i] = amalloc(12 * (2 << i));
+	regions[i] = amalloc(REGION_SIZE(i));
 	ASSERT(regions[i] != NULL);
     }
     for(i = 0; i < NSIZES; i++) {
@@ -66,7 +69,7 @@ static void test_amalloc() {
 static void test_mallocd_fixture(void (*test)()) {
     int i;
     for(i = 0; i < NSIZES; i++) {
-	regions[i] = amalloc(12 * (2 << i));
+	regions[i] = amalloc(REGION_SIZE(i));
     }
     test();
 }
@@ -75,7 +78,7 @@ static void test_afree() {
     int i;
     CHECKPOINT();
     for(i = 0; i < NSIZES; i++) {
-	afree(regions[i], 12 * (2 << i));
+	afree(regions[i], REGION_SIZE(i));
     }
 }
 
@@ -85,16 +88,16 @@ static void test_arealloc() {
     /* realloc within the same chunk */
     for(i = 0; i < NSIZES; i++) {
 	void *old = regions[i];
-	void *new = arealloc(old, 12 * (2 << i), 12 * (2 << i) + 4);
+	void *new = arealloc(old, REGION_SIZE(i), REGION_SIZE(i) + 4);
 	ASSERT(new != NULL);
 	regions[i] = new;
-	ASSERT(new == old);
+	/* ASSERT(new == old); */
     }
     CHECKPOINT();
     /* realloc to a different chunk */
     for(i = 0; i < NSIZES; i++) {
 	void *old = regions[i];
-	void *new = arealloc(old, 12 * (2 << i) + 4, 12 * (2 << (i + 1)) + 4);
+	void *new = arealloc(old, REGION_SIZE(i) + 4, REGION_SIZE(i + 1) + 4);
 	ASSERT(new != NULL);
 	regions[i] = new;
 	/* ASSERT(new != old); */
@@ -102,13 +105,13 @@ static void test_arealloc() {
     CHECKPOINT();
     /* realloc as free */
     for(i = 0; i < NSIZES; i++) {
-	regions[i] = arealloc(regions[i], 12 * (2 << (i + 1)) + 4, 0);
+	regions[i] = arealloc(regions[i], REGION_SIZE(i + 1) + 4, 0);
     }
     CHECKPOINT();
     /* realloc as alloc */
     for(i = 0; i < NSIZES; i++) {
 	void *old = regions[i];
-	void *new = arealloc(old, 0, 12 * (2 << (i + 1)) + 4);
+	void *new = arealloc(old, 0, REGION_SIZE(i));
 	ASSERT(new != NULL);
 	regions[i] = new;
     }
@@ -116,12 +119,12 @@ static void test_arealloc() {
 
 static void test_atryrealloc() {
     int i;
-    for(i = 0; i < NSIZES; i++) {
-	ASSERT(atryrealloc(regions[i], 12 * (2 << i), 12 * (2 << i) + 4));
-    }
     /* for(i = 0; i < NSIZES; i++) { */
-    /* 	ASSERT(!atryrealloc(regions[i], 12 * (2 << i) + 4, 12 * (2 << (i + 1)) + 4)); */
+    /* 	ASSERT(atryrealloc(regions[i], REGION_SIZE(i), REGION_SIZE(i) + 4)); */
     /* } */
+    for(i = 0; i < NSIZES; i++) {
+    	ASSERT(!atryrealloc(regions[i], REGION_SIZE(i) + 4, REGION_SIZE(i + 1) + 4));
+    }
 }
 
 /*************************/

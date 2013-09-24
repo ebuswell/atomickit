@@ -108,10 +108,12 @@ retry:
 	    goto retry;
 	}
     }
+    struct arcp_weakref *weakref = (struct arcp_weakref *) arcp_exchange(&region->weakref, NULL);
+    atomic_ptr_store_explicit(&region->weakref.ptr, weakref, memory_order_relaxed);
     if(region->destroy != NULL) {
 	region->destroy(region);
     }
-    arcp_store(&region->weakref, NULL);
+    arcp_release(weakref);
 abort:
     arcp_release(stub);
 }

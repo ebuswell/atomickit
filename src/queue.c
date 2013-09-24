@@ -33,6 +33,7 @@ int aqueue_init(aqueue_t *aqueue) {
     if(sentinel == NULL) {
 	return -1;
     }
+    arcp_init(&sentinel->item, NULL);
     arcp_init(&sentinel->next, NULL);
     arcp_region_init(sentinel, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
 
