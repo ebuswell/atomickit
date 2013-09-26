@@ -44,7 +44,7 @@
 #define PTR_COUNT(ptr) (((uintptr_t) (ptr)) & ((uintptr_t) (MIN_SIZE - 1)))
 
 /* #define AMALLOC_DEBUG 1 */
-/* #define AMALLOC_VALGRIND_DEBUG 1 */
+#define AMALLOC_VALGRIND_DEBUG 1
 
 #ifndef AMALLOC_VALGRIND_DEBUG
 

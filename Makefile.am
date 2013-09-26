@@ -21,12 +21,12 @@ EXTRA_DIST = autogen.sh Doxyfile atomickit.pc.in
 AUTOMAKE_OPTIONS = foreign serial-tests subdir-objects
 
 lib_LTLIBRARIES = libatomickit.la
-libatomickit_la_SOURCES = src/rcp.c src/queue.c src/malloc.c src/txn.c src/array.c
+libatomickit_la_SOURCES = src/rcp.c src/queue.c src/malloc.c src/txn.c src/array.c src/string.c
 libatomickit_la_LDFLAGS = $(LDFLAGS) -L$(libdir) -export-dynamic -version_info @VERSION_INFO@
 libatomickit_la_CFLAGS = $(CFLAGS) -fplan9-extensions -Og -g3 -Wall -Wextra -Wmissing-prototypes -Wredundant-decls -Iinclude -Iinclude/@HOST_ARCH_SRC@
 libatomickitincludedir = $(pkgincludedir)
 libatomickitarchincludedir = $(includedir)/@HOST_ARCH@/$(PACKAGE)/arch
-libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-rcp.h include/atomickit/atomic-queue.h include/atomickit/atomic-malloc.h include/atomickit/atomic-txn.h include/atomickit/atomic-array.h
+libatomickitinclude_HEADERS = include/atomickit/atomic.h include/atomickit/atomic-float.h include/atomickit/atomic-pointer.h include/atomickit/atomic-rcp.h include/atomickit/atomic-queue.h include/atomickit/atomic-malloc.h include/atomickit/atomic-txn.h include/atomickit/atomic-array.h include/atomickit/atomic-string.h
 libatomickitarchinclude_HEADERS = include/@HOST_ARCH_SRC@/atomickit/arch/compat.h include/@HOST_ARCH_SRC@/atomickit/arch/processor.h
 
 pkgconfigdir = $(libdir)/pkgconfig
