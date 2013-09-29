@@ -109,19 +109,21 @@ static void test_arcp_init_region_fixture(void (*test)()) {
 }
 
 static void test_arcp_init() {
+    struct arcp_region *rg;
     CHECKPOINT();
     arcp_init(&arcp, region1);
     ASSERT(arcp_refcount(region1) == 1);
     ASSERT(arcp_ptrcount(region1) == 1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(!region1_destroyed);
-    struct arcp_region *rg = arcp_load_phantom(&arcp);
+    rg = arcp_load_phantom(&arcp);
     ASSERT(rg == region1);
 }
 
 static void test_arcp_acquire() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = arcp_acquire(region1);
+    rg = arcp_acquire(region1);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(arcp_refcount(region1) == 2);
@@ -131,14 +133,16 @@ static void test_arcp_acquire() {
 
 static void test_arcp_region_init_weakref() {
     int r;
+    struct arcp_weakref *weakref;
+    struct arcp_region *rg;
     CHECKPOINT();
     r = arcp_region_init_weakref(region1);
     ASSERT(r == 0);
-    struct arcp_weakref *weakref = arcp_weakref_phantom(region1);
+    weakref = arcp_weakref_phantom(region1);
     ASSERT(weakref != NULL);
     ASSERT(arcp_refcount(weakref) == 0);
     ASSERT(arcp_ptrcount(weakref) == 1);
-    struct arcp_region *rg = arcp_weakref_load(weakref);
+    rg = arcp_weakref_load(weakref);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     arcp_region_destroy_weakref(region1);
@@ -146,6 +150,8 @@ static void test_arcp_region_init_weakref() {
 
 /****************************/
 static void test_arcp_init_weakref_fixture(void (*test)()) {
+    struct arcp_weakref *weakref1;
+    struct arcp_weakref *weakref2;
     region1_destroyed = false;
     region2_destroyed = false;
     weakref1_destroyed = false;
@@ -159,8 +165,8 @@ static void test_arcp_init_weakref_fixture(void (*test)()) {
     CHECKPOINT();
     arcp_region_init(region2, destroy_region2);
     CHECKPOINT();
-    struct arcp_weakref *weakref1 = alloca(sizeof(struct arcp_weakref));
-    struct arcp_weakref *weakref2 = alloca(sizeof(struct arcp_weakref));
+    weakref1 = alloca(sizeof(struct arcp_weakref));
+    weakref2 = alloca(sizeof(struct arcp_weakref));
     CHECKPOINT();
     atomic_ptr_init(&weakref1->ptr, region1);
     CHECKPOINT();
@@ -188,32 +194,37 @@ static void test_arcp_region_destroy_weakref() {
 }
 
 static void test_arcp_weakref() {
+    struct arcp_weakref *weakref;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_weakref *weakref = arcp_weakref(region1);
+    weakref = arcp_weakref(region1);
     ASSERT(weakref != NULL);
     ASSERT(arcp_refcount(weakref) == 1);
     ASSERT(arcp_ptrcount(weakref) == 1);
     ASSERT(!weakref1_destroyed);
-    struct arcp_region *rg = arcp_weakref_load(weakref);
+    rg = arcp_weakref_load(weakref);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
 }
 
 static void test_arcp_weakref_phantom() {
+    struct arcp_weakref *weakref;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_weakref *weakref = arcp_weakref_phantom(region1);
+    weakref = arcp_weakref_phantom(region1);
     ASSERT(weakref != NULL);
     ASSERT(arcp_refcount(weakref) == 0);
     ASSERT(arcp_ptrcount(weakref) == 1);
     ASSERT(!weakref1_destroyed);
-    struct arcp_region *rg = arcp_weakref_load(weakref);
+    rg = arcp_weakref_load(weakref);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
 }
 
 static void test_arcp_weakref_load() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = arcp_weakref_load(arcp_weakref_phantom(region1));
+    rg = arcp_weakref_load(arcp_weakref_phantom(region1));
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(arcp_refcount(region1) == 2);
@@ -248,8 +259,9 @@ static void test_arcp_init_fixture(void (*test)()) {
 }
 
 static void test_arcp_load() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = arcp_load(&arcp);
+    rg = arcp_load(&arcp);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(arcp_refcount(region1) == 2);
@@ -258,8 +270,9 @@ static void test_arcp_load() {
 }
 
 static void test_arcp_load_phantom() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = arcp_load_phantom(&arcp);
+    rg = arcp_load_phantom(&arcp);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(arcp_refcount(region1) == 1);
@@ -285,6 +298,7 @@ static void test_arcp_release() {
 }
 
 static void test_arcp_compare_store() {
+    struct arcp_region *rg;
     /* succeed */
     ASSERT(arcp_compare_store(&arcp, region1, region2));
     ASSERT(arcp_refcount(region1) == 1);
@@ -295,7 +309,7 @@ static void test_arcp_compare_store() {
     ASSERT(!region2_destroyed);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), strtest.string2) == 0);
-    struct arcp_region *rg = arcp_load_phantom(&arcp);
+    rg = arcp_load_phantom(&arcp);
     ASSERT(rg == region2);
     /* fail */
     ASSERT(!arcp_compare_store(&arcp, region1, region1));
@@ -312,6 +326,7 @@ static void test_arcp_compare_store() {
 }
 
 static void test_arcp_compare_store_release_succeed() {
+    struct arcp_region *rg;
     /* succeed */
     ASSERT(arcp_compare_store_release(&arcp, region1, region2));
     ASSERT(arcp_refcount(region1) == 0);
@@ -322,11 +337,12 @@ static void test_arcp_compare_store_release_succeed() {
     ASSERT(!region2_destroyed);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), strtest.string2) == 0);
-    struct arcp_region *rg = arcp_load(&arcp);
+    rg = arcp_load(&arcp);
     ASSERT(rg == region2);
 }
 
 static void test_arcp_compare_store_release_fail() {
+    struct arcp_region *rg;
     /* fail */
     ASSERT(!arcp_compare_store_release(&arcp, region2, region1));
     ASSERT(arcp_refcount(region1) == 0);
@@ -337,11 +353,12 @@ static void test_arcp_compare_store_release_fail() {
     ASSERT(region2_destroyed);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), strtest.string2) == 0);
-    struct arcp_region *rg = arcp_load_phantom(&arcp);
+    rg = arcp_load_phantom(&arcp);
     ASSERT(rg == region1);
 }
 
 static void test_arcp_store() {
+    struct arcp_region *rg;
     CHECKPOINT();
     arcp_store(&arcp, region2);
     ASSERT(!region1_destroyed);
@@ -352,7 +369,7 @@ static void test_arcp_store() {
     ASSERT(arcp_ptrcount(region2) == 1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), strtest.string1) == 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), strtest.string2) == 0);
-    struct arcp_region *rg = arcp_load_phantom(&arcp);
+    rg = arcp_load_phantom(&arcp);
     ASSERT(rg == region2);
     arcp_release(region2);
     CHECKPOINT();
@@ -370,8 +387,9 @@ static void test_arcp_store() {
 }
 
 static void test_arcp_exchange() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = arcp_exchange(&arcp, region2);
+    rg = arcp_exchange(&arcp, region2);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
     ASSERT(arcp_refcount(region1) == 2);
@@ -403,19 +421,11 @@ int run_atomic_rcp_h_test_suite() {
     int r;
     void (*arcp_uninit_tests[])() = { test_arcp_region_init, NULL };
     char *arcp_uninit_test_names[] = { "arcp_region_init", NULL };
-    r = run_test_suite(test_arcp_uninit_fixture, arcp_uninit_test_names, arcp_uninit_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*arcp_init_region_tests[])() = { test_arcp_init, test_arcp_acquire,
 					   test_arcp_region_init_weakref, NULL };
     char *arcp_init_region_test_names[] = { "arcp_init", "arcp_acquire",
 					    "arcp_region_init_weakref", NULL };
-    r = run_test_suite(test_arcp_init_region_fixture, arcp_init_region_test_names, arcp_init_region_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*arcp_init_weakref_tests[])() = { test_arcp_region_destroy_weakref, test_arcp_weakref,
 					    test_arcp_weakref_phantom, test_arcp_weakref_load,
@@ -423,19 +433,32 @@ int run_atomic_rcp_h_test_suite() {
     char *arcp_init_weakref_test_names[] = { "arcp_region_destroy_weakref", "arcp_weakref",
 					     "arcp_weakref_phantom", "arcp_weakref_load",
 					     "arcp_release_with_weakref", NULL };
-    r = run_test_suite(test_arcp_init_weakref_fixture, arcp_init_weakref_test_names, arcp_init_weakref_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*arcp_init_tests[])() = { test_arcp_load, test_arcp_load_phantom,
 				    test_arcp_compare_store, test_arcp_compare_store_release_succeed,
 				    test_arcp_compare_store_release_fail,
 				    test_arcp_store, test_arcp_release, test_arcp_exchange, NULL };
+
     char *arcp_init_test_names[] = { "arcp_load", "arcp_load_phantom",
 				     "arcp_compare_store", "arcp_compare_store_release_succeed",
 				     "arcp_compare_store_release_fail",
 				     "arcp_store", "arcp_release", "arcp_exchange", NULL };
+
+    r = run_test_suite(test_arcp_uninit_fixture, arcp_uninit_test_names, arcp_uninit_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(test_arcp_init_region_fixture, arcp_init_region_test_names, arcp_init_region_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(test_arcp_init_weakref_fixture, arcp_init_weakref_test_names, arcp_init_weakref_tests);
+    if(r != 0) {
+	return r;
+    }
+
     r = run_test_suite(test_arcp_init_fixture, arcp_init_test_names, arcp_init_tests);
     if(r != 0) {
 	return r;

@@ -112,8 +112,9 @@ static void test_atomic_ptr_load() {
 }
 
 static void test_atomic_ptr_exchange_explicit() {
+    void *ptr;
     CHECKPOINT();
-    void *ptr = atomic_ptr_exchange_explicit(&aptr, string2, memory_order_relaxed);
+    ptr = atomic_ptr_exchange_explicit(&aptr, string2, memory_order_relaxed);
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
     ASSERT(strcmp(string2, strtest.string2) == 0);
@@ -121,8 +122,9 @@ static void test_atomic_ptr_exchange_explicit() {
 }
 
 static void test_atomic_ptr_exchange() {
+    void *ptr;
     CHECKPOINT();
-    void *ptr = atomic_ptr_exchange(&aptr, string2);
+    ptr = atomic_ptr_exchange(&aptr, string2);
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
     ASSERT(strcmp(string2, strtest.string2) == 0);
@@ -130,7 +132,8 @@ static void test_atomic_ptr_exchange() {
 }
 
 static void test_atomic_ptr_compare_exchange_strong_explicit() {
-    void *ptr = string2;
+    void *ptr;
+    ptr = string2;
     ASSERT(!atomic_ptr_compare_exchange_strong_explicit(&aptr, &ptr, string3, memory_order_relaxed, memory_order_relaxed));
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
@@ -146,7 +149,8 @@ static void test_atomic_ptr_compare_exchange_strong_explicit() {
 }
 
 static void test_atomic_ptr_compare_exchange_strong() {
-    void *ptr = string2;
+    void *ptr;
+    ptr = string2;
     ASSERT(!atomic_ptr_compare_exchange_strong(&aptr, &ptr, string3));
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
@@ -162,7 +166,8 @@ static void test_atomic_ptr_compare_exchange_strong() {
 }
 
 static void test_atomic_ptr_compare_exchange_weak_explicit() {
-    void *ptr = string2;
+    void *ptr;
+    ptr = string2;
     ASSERT(!atomic_ptr_compare_exchange_weak_explicit(&aptr, &ptr, string3, memory_order_relaxed, memory_order_relaxed));
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
@@ -178,7 +183,8 @@ static void test_atomic_ptr_compare_exchange_weak_explicit() {
 }
 
 static void test_atomic_ptr_compare_exchange_weak() {
-    void *ptr = string2;
+    void *ptr;
+    ptr = string2;
     ASSERT(!atomic_ptr_compare_exchange_weak(&aptr, &ptr, string3));
     ASSERT(ptr == string1);
     ASSERT(strcmp(string1, strtest.string1) == 0);
@@ -271,11 +277,6 @@ int run_atomic_pointer_h_test_suite() {
     void (*atomic_ptr_blank_tests[])() = { test_atomic_ptr_init, test_atomic_ptr_is_lock_free, NULL };
     char *atomic_ptr_blank_test_names[] = { "atomic_ptr_init", "atomic_ptr_is_lock_free", NULL };
 
-    r = run_test_suite(test_atomic_ptr_strinit_fixture, atomic_ptr_blank_test_names, atomic_ptr_blank_tests);
-    if(r != 0) {
-	return r;
-    }
-
     void (*atomic_ptr_tests[])() = { test_atomic_ptr_store_explicit, test_atomic_ptr_store,
 				     test_atomic_ptr_load_explicit, test_atomic_ptr_load,
 				     test_atomic_ptr_exchange_explicit, test_atomic_ptr_exchange,
@@ -294,10 +295,6 @@ int run_atomic_pointer_h_test_suite() {
 				      "atomic_ptr_compare_exchange_weak",
 				      "atomic_ptr_fetch_add_explicit",
 				      "atomic_ptr_fetch_add", NULL };
-    r = run_test_suite(test_atomic_ptr_fixture, atomic_ptr_test_names, atomic_ptr_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*atomic_ptr_offset_tests[])() = { test_atomic_ptr_fetch_sub_explicit,
 					    test_atomic_ptr_fetch_sub,
@@ -315,6 +312,17 @@ int run_atomic_pointer_h_test_suite() {
 					     "atomic_ptr_fetch_xor",
 					     "atomic_ptr_fetch_and_explicit",
 					     "atomic_ptr_fetch_and", NULL };
+
+    r = run_test_suite(test_atomic_ptr_strinit_fixture, atomic_ptr_blank_test_names, atomic_ptr_blank_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(test_atomic_ptr_fixture, atomic_ptr_test_names, atomic_ptr_tests);
+    if(r != 0) {
+	return r;
+    }
+
     r = run_test_suite(test_atomic_ptr_offset_fixture, atomic_ptr_offset_test_names, atomic_ptr_offset_tests);
     if(r != 0) {
 	return r;

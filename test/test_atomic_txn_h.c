@@ -92,9 +92,10 @@ static void test_atxn_init_region_fixture(void (*test)()) {
 }
 
 static void test_atxn_init() {
+    struct arcp_region *rg1;
     ASSERT(atxn_init(&atxn1, region1) == 0);
     ASSERT(!region1_destroyed);
-    struct arcp_region *rg1 = atxn_load1(&atxn1);
+    rg1 = atxn_load1(&atxn1);
     ASSERT(rg1 == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string1) == 0);
     atxn_destroy(&atxn1);
@@ -103,6 +104,7 @@ static void test_atxn_init() {
 /*************************/
 
 static void test_atxn_init_fixture(void (*test)()) {
+    int r;
     region1_destroyed = false;
     region2_destroyed = false;
     region3_destroyed = false;
@@ -115,7 +117,6 @@ static void test_atxn_init_fixture(void (*test)()) {
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
-    int r;
     r = atxn_init(&atxn1, region1);
     if(r != 0) {
 	UNRESOLVED("atxn_init failed");
@@ -140,10 +141,12 @@ static void test_atxn_destroy() {
 }
 
 static void test_atxn_load1() {
+    struct arcp_region *rg1;
+    struct arcp_region *rg2;
     CHECKPOINT();
-    struct arcp_region *rg1 = atxn_load1(&atxn1);
+    rg1 = atxn_load1(&atxn1);
     CHECKPOINT();
-    struct arcp_region *rg2 = atxn_load1(&atxn1);
+    rg2 = atxn_load1(&atxn1);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(rg2 == region1);
@@ -156,8 +159,9 @@ static void test_atxn_load1() {
 }
 
 static void test_atxn_load_phantom1() {
+    struct arcp_region *rg1;
     CHECKPOINT();
-    struct arcp_region *rg1 = atxn_load_phantom1(&atxn1);
+    rg1 = atxn_load_phantom1(&atxn1);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
@@ -187,6 +191,7 @@ static void test_atxn_start() {
 /*************************/
 #include <stdio.h>
 static void test_atxn_started_fixture(void (*test)()) {
+    int r;
     region1_destroyed = false;
     region2_destroyed = false;
     region3_destroyed = false;
@@ -199,7 +204,6 @@ static void test_atxn_started_fixture(void (*test)()) {
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
     arcp_region_init(region3, destroy_region3);
-    int r;
     r = atxn_init(&atxn1, region1);
     if(r != 0) {
 	UNRESOLVED("atxn_init failed");
@@ -220,9 +224,10 @@ static void test_atxn_started_fixture(void (*test)()) {
 }
 
 static void test_atxn_abort() {
-    CHECKPOINT();
     struct arcp_region *rg;
-    int r = atxn_load(handle1, &atxn1, &rg);
+    int r;
+    CHECKPOINT();
+    r = atxn_load(handle1, &atxn1, &rg);
     if(r != 0) {
     	UNRESOLVED("atxn_load failed");
     }
@@ -236,9 +241,11 @@ static void test_atxn_abort() {
 }
 
 static void test_atxn_status() {
-    ASSERT(atxn_status(handle1) == ATXN_PENDING);
     struct arcp_region *rg;
-    enum atxn_status r = atxn_load(handle1, &atxn1, &rg);
+    struct arcp_region *rg2;
+    enum atxn_status r;
+    ASSERT(atxn_status(handle1) == ATXN_PENDING);
+    r = atxn_load(handle1, &atxn1, &rg);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
@@ -252,7 +259,6 @@ static void test_atxn_status() {
     if(atxn_commit(handle2) != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_commit failed");
     }
-    struct arcp_region *rg2;
     r = atxn_load(handle1, &atxn2, &rg2);
     if(r != ATXN_FAILURE) {
 	UNRESOLVED("atxn_load failed");
@@ -261,18 +267,21 @@ static void test_atxn_status() {
 }
 
 static void test_atxn_load() {
-    CHECKPOINT();
     struct arcp_region *rg1;
-    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
-    ASSERT(r == ATXN_SUCCESS);
     struct arcp_region *rg2;
+    struct arcp_region *rg3;
+    struct arcp_region *rg4;
+    enum atxn_status r;
+    int rr;
+    CHECKPOINT();
+    r = atxn_load(handle1, &atxn1, &rg1);
+    ASSERT(r == ATXN_SUCCESS);
     r = atxn_load(handle1, &atxn1, &rg2);
     ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region1_destroyed);
     ASSERT(rg1 == region1);
     ASSERT(rg2 == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), ptrtest.string1) == 0);
-    struct arcp_region *rg3;
     r = atxn_load(handle1, &atxn2, &rg3);
     ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region2_destroyed);
@@ -282,7 +291,6 @@ static void test_atxn_load() {
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
     }
-    struct arcp_region *rg4;
     r = atxn_load(handle1, &atxn2, &rg4);
     ASSERT(r == ATXN_SUCCESS);
     ASSERT(!region3_destroyed);
@@ -294,7 +302,7 @@ static void test_atxn_load() {
     ASSERT(!region3_destroyed);
     ASSERT(!region2_destroyed);
     ASSERT(region1_destroyed);
-    int rr = atxn_init(&atxn1, region2);
+    rr = atxn_init(&atxn1, region2);
     if(rr != 0) {
 	UNRESOLVED("atxn_init failed");
     }
@@ -319,13 +327,17 @@ static void test_atxn_load() {
 }
 
 static void test_atxn_store() {
+    struct arcp_region *rg1;
+    struct arcp_region *rg2;
+    struct arcp_region *rg3;
+    struct arcp_region *rg4;
+    enum atxn_status r;
     CHECKPOINT();
     /* Store is visible to our handle */
     ASSERT(atxn_store(handle1, &atxn1, region2) == 0);
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
-    struct arcp_region *rg1;
-    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
+    r = atxn_load(handle1, &atxn1, &rg1);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
@@ -336,7 +348,6 @@ static void test_atxn_store() {
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
     ASSERT(!region3_destroyed);
-    struct arcp_region *rg2;
     r = atxn_load(handle1, &atxn1, &rg2);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
@@ -344,7 +355,6 @@ static void test_atxn_store() {
     ASSERT(rg2 == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg2), ptrtest.string3) == 0);
     /* This store is not visible to other handles */
-    struct arcp_region *rg3;
     r = atxn_load(handle2, &atxn1, &rg3);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
@@ -359,7 +369,7 @@ static void test_atxn_store() {
     ASSERT(!region1_destroyed);
     ASSERT(!region2_destroyed);
     ASSERT(!region3_destroyed);
-    struct arcp_region *rg4 = atxn_load1(&atxn1);
+    rg4 = atxn_load1(&atxn1);
     ASSERT(rg4 == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg4), ptrtest.string3) == 0);
     atxn_release1(rg4);
@@ -378,9 +388,12 @@ static void test_atxn_store() {
 }
 
 static void test_atxn_commit() {
-    CHECKPOINT();
     struct arcp_region *rg1;
-    enum atxn_status r = atxn_load(handle1, &atxn1, &rg1);
+    struct arcp_region *rg2;
+    struct arcp_region *rg3;
+    enum atxn_status r;
+    CHECKPOINT();
+    r = atxn_load(handle1, &atxn1, &rg1);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
     }
@@ -389,7 +402,6 @@ static void test_atxn_commit() {
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_store failed");
     }
-    struct arcp_region *rg2;
     r = atxn_load(handle2, &atxn1, &rg2);
     if(r != ATXN_SUCCESS) {
 	UNRESOLVED("atxn_load failed");
@@ -399,7 +411,7 @@ static void test_atxn_commit() {
 	UNRESOLVED("atxn_store failed");
     }
     ASSERT(atxn_commit(handle1) == ATXN_SUCCESS);
-    struct arcp_region *rg3 = atxn_load1(&atxn1);
+    rg3 = atxn_load1(&atxn1);
     ASSERT(rg3 == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg3), ptrtest.string3) == 0);
     atxn_release1(rg3);
@@ -429,10 +441,6 @@ int run_atomic_txn_h_test_suite() {
     int r;
     void (*init_region_tests[])() = { test_atxn_init, NULL };
     char *init_region_test_names[] = { "atxn_init", NULL };
-    r = run_test_suite(test_atxn_init_region_fixture, init_region_test_names, init_region_tests);
-    if(r != 0) {
-    	return r;
-    }
 
     void (*init_tests[])() = { test_atxn_destroy, test_atxn_load1, test_atxn_load_phantom1,
     			       test_atxn_release1, test_atxn_start,
@@ -440,15 +448,22 @@ int run_atomic_txn_h_test_suite() {
     char *init_test_names[] = { "atxn_destroy", "atxn_load1", "atxn_load_phantom1",
     				"atxn_release1", "atxn_start",
     				NULL };
-    r = run_test_suite(test_atxn_init_fixture, init_test_names, init_tests);
-    if(r != 0) {
-    	return r;
-    }
 
     void (*started_tests[])() = { test_atxn_abort, test_atxn_status, test_atxn_load,
     				  test_atxn_store, test_atxn_commit, NULL };
     char *started_test_names[] = { "atxn_abort", "atxn_status", "atxn_load",
     				   "atxn_store", "atxn_commit", NULL };
+
+    r = run_test_suite(test_atxn_init_region_fixture, init_region_test_names, init_region_tests);
+    if(r != 0) {
+    	return r;
+    }
+
+    r = run_test_suite(test_atxn_init_fixture, init_test_names, init_tests);
+    if(r != 0) {
+    	return r;
+    }
+
     r = run_test_suite(test_atxn_started_fixture, started_test_names, started_tests);
     if(r != 0) {
     	return r;

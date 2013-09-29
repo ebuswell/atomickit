@@ -41,7 +41,8 @@ static void __astr_destroy(struct astr *str) {
 }
 
 struct astr *astr_create(size_t len, char *data) {
-    struct astr *str = amalloc(sizeof(struct astr));
+    struct astr *str;
+    str = amalloc(sizeof(struct astr));
     if(str == NULL) {
 	return NULL;
     }
@@ -51,12 +52,15 @@ struct astr *astr_create(size_t len, char *data) {
 }
 
 struct astr *astr_alloc(size_t len) {
-    struct astr *str = amalloc(sizeof(struct astr));
+    struct astr *str;
+    char *data;
+
+    str = amalloc(sizeof(struct astr));
     if(str == NULL) {
 	return NULL;
     }
 
-    char *data = amalloc(len + 1);
+    data = amalloc(len + 1);
     if(data == NULL) {
 	afree(str, sizeof(struct astr));
 	return NULL;
@@ -71,8 +75,10 @@ struct astr *astr_cstrwrap(char *cstr) {
 }
 
 struct astr *astr_cstrdup(char *cstr) {
-    size_t len = strlen(cstr);
-    struct astr *rstr = astr_alloc(len);
+    size_t len;
+    struct astr *rstr;
+    len = strlen(cstr);
+    rstr = astr_alloc(len);
     if(rstr == NULL) {
 	return NULL;
     }
@@ -84,7 +90,8 @@ struct astr *astr_cstrdup(char *cstr) {
 }
 
 struct astr *astr_dup(struct astr *str) {
-    struct astr *rstr = astr_alloc(str->len);
+    struct astr *rstr;
+    rstr = astr_alloc(str->len);
     if(rstr == NULL) {
 	return NULL;
     }
@@ -106,7 +113,8 @@ struct astr *astr_cpy(struct astr *dest, struct astr *src) {
 }
 
 struct astr *astr_cstrcpy(struct astr *dest, char *src) {
-    size_t src_len = strlen(src);
+    size_t src_len;
+    src_len = strlen(src);
     memcpy(dest->data, src, src_len + 1);
     dest->len = src_len;
     return dest;
@@ -119,14 +127,16 @@ struct astr *astr_cat(struct astr *str1, struct astr *str2) {
 }
 
 struct astr *astr_cstrcat(struct astr *str1, char *str2) {
-    size_t str2_len = strlen(str2);
+    size_t str2_len;
+    str2_len = strlen(str2);
     memcpy(str1->data + str1->len, str2, str2_len + 1);
     str1->len += str2_len;
     return str1;
 }
 
 struct astr *astr_chr(struct astr *str, char chr) {
-    char *rdata = memchr(str->data, chr, str->len);
+    char *rdata;
+    rdata = memchr(str->data, chr, str->len);
     if(rdata == NULL) {
 	return NULL;
     }
@@ -135,7 +145,8 @@ struct astr *astr_chr(struct astr *str, char chr) {
 }
 
 struct astr *astr_rchr(struct astr *str, char chr) {
-    char *rdata = memrchr(str->data, chr, str->len);
+    char *rdata;
+    rdata = memrchr(str->data, chr, str->len);
     if(rdata == NULL) {
 	return NULL;
     }
@@ -144,11 +155,12 @@ struct astr *astr_rchr(struct astr *str, char chr) {
 }
 
 struct astr *astr_str(struct astr *haystack, struct astr *needle) {
+    size_t last;
+    size_t i;
     if(haystack->len < needle->len) {
 	return NULL;
     }
-    size_t last = haystack->len - needle->len;
-    size_t i;
+    last = haystack->len - needle->len;
     for(i = 0; i <= last; i++) {
 	if(memcmp(haystack->data + i, needle->data, needle->len) == 0) {
 	    return astr_create(haystack->len - i, haystack->data + i);
@@ -158,12 +170,14 @@ struct astr *astr_str(struct astr *haystack, struct astr *needle) {
 }
 
 struct astr *astr_cstrstr(struct astr *haystack, char *needle) {
-    size_t needle_len = strlen(needle);
+    size_t last;
+    size_t i;
+    size_t needle_len;
+    needle_len = strlen(needle);
     if(haystack->len < needle_len) {
 	return NULL;
     }
-    size_t last = haystack->len - needle_len;
-    size_t i;
+    last = haystack->len - needle_len;
     for(i = 0; i <= last; i++) {
 	if(memcmp(haystack->data + i, needle, needle_len) == 0) {
 	    return astr_create(haystack->len - i, haystack->data + i);
@@ -173,11 +187,12 @@ struct astr *astr_cstrstr(struct astr *haystack, char *needle) {
 }
 
 struct astr *astr_rstr(struct astr *haystack, struct astr *needle) {
+    size_t last;
+    size_t i;
     if(haystack->len < needle->len) {
 	return NULL;
     }
-    size_t last = haystack->len - needle->len;
-    size_t i;
+    last = haystack->len - needle->len;
     for(i = last; i <= last; i--) {
 	if(memcmp(haystack->data + i, needle->data, needle->len) == 0) {
 	    return astr_create(haystack->len - i, haystack->data + i);
@@ -187,12 +202,14 @@ struct astr *astr_rstr(struct astr *haystack, struct astr *needle) {
 }
 
 struct astr *astr_cstrrstr(struct astr *haystack, char *needle) {
-    size_t needle_len = strlen(needle);
+    size_t last;
+    size_t i;
+    size_t needle_len;
+    needle_len = strlen(needle);
     if(haystack->len < needle_len) {
 	return NULL;
     }
-    size_t last = haystack->len - needle_len;
-    size_t i;
+    last = haystack->len - needle_len;
     for(i = last; i <= last; i--) {
 	if(memcmp(haystack->data + i, needle, needle_len) == 0) {
 	    return astr_create(haystack->len - i, haystack->data + i);

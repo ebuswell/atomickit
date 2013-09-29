@@ -34,7 +34,9 @@ static void __atxn_destroy_stub(struct atxn_stub *stub) {
 }
 
 static inline struct atxn_stub *create_stub(struct arcp_region *prev, struct arcp_region *value) {
-    struct atxn_stub *stub = amalloc(sizeof(struct atxn_stub));
+    struct atxn_stub *stub;
+
+    stub = amalloc(sizeof(struct atxn_stub));
     if(stub == NULL) {
 	return NULL;
     }
@@ -46,7 +48,9 @@ static inline struct atxn_stub *create_stub(struct arcp_region *prev, struct arc
 }
 
 int atxn_init(atxn_t *txn, struct arcp_region *region) {
-    struct atxn_stub *stub = create_stub(NULL, region);
+    struct atxn_stub *stub;
+
+    stub = create_stub(NULL, region);
     if(stub == NULL) {
 	return -1;
     }
@@ -63,6 +67,7 @@ struct arcp_region *atxn_load1(atxn_t *txn) {
     unsigned int clock;
     struct atxn_stub *stub;
     struct arcp_region *ret;
+
     stub = (struct atxn_stub *) arcp_load(&txn->rcp);
     clock = atomic_load_explicit(&atxn_clock, memory_order_acquire);
     if(atomic_load_explicit(&stub->clock, memory_order_acquire) == clock) {
@@ -75,9 +80,9 @@ struct arcp_region *atxn_load1(atxn_t *txn) {
 	     * thread2 updates the clock, and thread3 removes prev on
 	     * destroying the handle.  However, I think I can remove
 	     * this, as happens-before is transitive for acq_rel, and
-	     * thread3 removing prev->thread x setting
-	     * success->thread2 updating the clock.  Any way about it,
-	     * this is pretty dicey. */
+	     * thread3 removing prev happens before thread x setting
+	     * success happens before thread2 updating the clock.  Any
+	     * way about it, this is pretty dicey. */
 	    /* Counter changed; return current value */
 	    arcp_release(ret);
 	    ret = arcp_load(&stub->value);
@@ -94,6 +99,7 @@ struct arcp_region *atxn_load_phantom1(atxn_t *txn) {
     unsigned int clock;
     struct atxn_stub *stub;
     struct arcp_region *ret;
+
     stub = (struct atxn_stub *) arcp_load(&txn->rcp);
     clock = atomic_load_explicit(&atxn_clock, memory_order_acquire);
     if(atomic_load_explicit(&stub->clock, memory_order_acquire) == clock) {
@@ -130,7 +136,9 @@ static void __atxn_handle_destroy(struct atxn_handle *handle) {
 }
 
 struct atxn_handle *atxn_start() {
-    struct atxn_handle *ret = amalloc(sizeof(struct atxn_handle));
+    struct atxn_handle *ret;
+
+    ret = amalloc(sizeof(struct atxn_handle));
     if(ret == NULL) {
 	return NULL;
     }
@@ -148,12 +156,15 @@ struct atxn_handle *atxn_start() {
 }
 
 #define IF_BSEARCH(list, nitems, value, retidx)	do {	\
+    size_t __l;						\
+    size_t __u;						\
     (retidx) = 0;					\
-    size_t __l = 0;					\
-    size_t __u = (nitems);				\
+    __l = 0;						\
+    __u = (nitems);					\
     while(__l < __u) {					\
-        (retidx) = (__l + __u) / 2;			\
-	atxn_t *__location = (list)[retidx].location;	\
+	atxn_t *__location;				\
+	(retidx) = (__l + __u) / 2;			\
+	__location = (list)[retidx].location;		\
 	if((value) < __location) {			\
 	    __u = (retidx);				\
 	} else if((value) > __location) {		\
@@ -166,16 +177,21 @@ struct atxn_handle *atxn_start() {
 
 static int update_list_insert(struct atxn_handle *handle, size_t i,
 			      atxn_t *location, struct arcp_region *region) {
-    struct atxn_stub *stub = create_stub(NULL, region);
+    struct atxn_stub *stub;
+    size_t length;
+    struct atxn_update *list;
+
+    stub = create_stub(NULL, region);
     if(stub == NULL) {
 	return -1;
     }
-    size_t length = handle->nupdates;
-    struct atxn_update *list = handle->update_list;
+    length = handle->nupdates;
+    list = handle->update_list;
     if(atryrealloc(list, sizeof(struct atxn_update) * length, sizeof(struct atxn_update) * (length + 1))) {
 	memmove(&list[i + 1], &list[i], sizeof(struct atxn_update) * (length - i));
     } else {
-	struct atxn_update *new_list = amalloc(sizeof(struct atxn_update) * (length + 1));
+	struct atxn_update *new_list;
+	new_list = amalloc(sizeof(struct atxn_update) * (length + 1));
 	if(new_list == NULL) {
 	    arcp_release(stub);
 	    return -1;
@@ -194,12 +210,15 @@ static int update_list_insert(struct atxn_handle *handle, size_t i,
 
 static int check_list_insert(struct atxn_handle *handle, size_t i,
 			     atxn_t *location, struct arcp_region *region) {
-    size_t length = handle->nchecks;
-    struct atxn_check *list = handle->check_list;
+    size_t length;
+    struct atxn_check *list;
+    length = handle->nchecks;
+    list = handle->check_list;
     if(atryrealloc(list, sizeof(struct atxn_check) * length, sizeof(struct atxn_check) * (length + 1))) {
 	memmove(&list[i + 1], &list[i], sizeof(struct atxn_check) * (length - i));
     } else {
-	struct atxn_check *new_list = amalloc(sizeof(struct atxn_check) * (length + 1));
+	struct atxn_check *new_list;
+	new_list = amalloc(sizeof(struct atxn_check) * (length + 1));
 	if(new_list == NULL) {
 	    return -1;
 	}
@@ -216,8 +235,10 @@ static int check_list_insert(struct atxn_handle *handle, size_t i,
 }
 
 static int orphan_list_append(struct atxn_handle *handle, struct arcp_region *region) {
-    size_t length = handle->norphans;
-    struct arcp_region **list = handle->orphan_list;
+    size_t length;
+    struct arcp_region **list;
+    length = handle->norphans;
+    list = handle->orphan_list;
     list = arealloc(list, sizeof(struct arcp_region *) * length, sizeof(struct arcp_region *) * (length + 1));
     if(list == NULL) {
 	return -1;
@@ -229,16 +250,20 @@ static int orphan_list_append(struct atxn_handle *handle, struct arcp_region *re
 }
 
 enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_region **region) {
+    int r;
+    size_t i, j, nchecks;
+    struct atxn_update *update_list;
+    struct atxn_check *check_list;
+
     /* First see if we already have this */
-    size_t i;
     /* Check update list */
-    struct atxn_update *update_list = handle->update_list;
+    update_list = handle->update_list;
     IF_BSEARCH(update_list, handle->nupdates, txn, i) {
 	*region = arcp_load_phantom(&update_list[i].stub->value);
 	return ATXN_SUCCESS;
     } ENDIF_BSEARCH;
     /* Check check list */
-    struct atxn_check *check_list = handle->check_list;
+    check_list = handle->check_list;
     IF_BSEARCH(check_list, handle->nchecks, txn, i) {
 	*region = check_list[i].value;
 	return ATXN_SUCCESS;
@@ -249,8 +274,7 @@ enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_
     /* Fetch the value */
     *region = atxn_load1(txn);
     /* Now check that no previous values have changed */
-    size_t nchecks = handle->nchecks;
-    size_t j;
+    nchecks = handle->nchecks;
     for(j = 0; j < nchecks; j++) {
 	if(atxn_load_phantom1(check_list[j].location) != check_list[j].value) {
 	    atomic_store_explicit(&handle->status, ATXN_FAILURE, memory_order_relaxed);
@@ -258,7 +282,7 @@ enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_
 	    return ATXN_FAILURE;
 	}
     }
-    int r = check_list_insert(handle, i, txn, *region);
+    r = check_list_insert(handle, i, txn, *region);
     if(r != 0) {
 	atxn_release1(*region);
 	return ATXN_ERROR;
@@ -268,9 +292,10 @@ enum atxn_status atxn_load(struct atxn_handle *handle, atxn_t *txn, struct arcp_
 
 enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp_region *value) {
     int r;
-    /* See if we've already set this previously */
     size_t i;
-    struct atxn_update *update_list = handle->update_list;
+    struct atxn_update *update_list;
+    /* See if we've already set this previously */
+    update_list = handle->update_list;
     IF_BSEARCH(update_list, handle->nupdates, txn, i) {
 	/* Add old value to orphan list*/
 	r = orphan_list_append(handle, arcp_load(&update_list[i].stub->value));
@@ -292,29 +317,37 @@ enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp
 }
 
 enum atxn_status atxn_commit(struct atxn_handle *handle) {
+    int r;
+    enum atxn_status ret;
+
     if(handle->nupdates == 0) {
 	arcp_release(handle);
 	return ATXN_SUCCESS;
     }
     /* Enqueue handle */
-    int r = aqueue_enq(&atxn_queue, handle);
+    r = aqueue_enq(&atxn_queue, handle);
     if(r != 0) {
 	arcp_release(handle);
 	return ATXN_ERROR;
     }
-    enum atxn_status ret;
     do {
+	struct atxn_handle *next;
+	unsigned int clock, newclock;
+	const size_t bins = ((sizeof(unsigned long) * 4) / 3);
+	unsigned long procstatus, round, donebit, procbit;
+	size_t i, j, max, items_per_bin, max_bin;
+
 	/* Get next pending handle */
-	struct atxn_handle *next = (struct atxn_handle *) aqueue_peek(&atxn_queue);
+	next = (struct atxn_handle *) aqueue_peek(&atxn_queue);
 	if(next == NULL) {
 	    /* Our handle must have finished before we could start working on it. */
 	    break;
 	}
 
-	unsigned int clock = atomic_load_explicit(&next->clock, memory_order_acquire);
+	clock = atomic_load_explicit(&next->clock, memory_order_acquire);
 	if(clock == 0) {
 	    /* 1. Set clock */
-	    unsigned int newclock = atomic_load_explicit(&atxn_clock, memory_order_acquire);
+	    newclock = atomic_load_explicit(&atxn_clock, memory_order_acquire);
 	    if(atomic_compare_exchange_strong_explicit(&next->clock, &clock, newclock,
 						       memory_order_acq_rel, memory_order_acquire)) {
 		clock = newclock;
@@ -322,18 +355,12 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 	}
 
 	/* 2. Set up bins and procstatus */
-	const size_t bins = ((sizeof(unsigned long) * 4) / 3);
-	unsigned long procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire);
-
-	unsigned long round;
-	unsigned long donebit;
-	unsigned long procbit;
-	size_t i;
+	procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire);
 
 	/* 3. Check previously obtained values */
 	if(next->nchecks != 0) {
-	    size_t checks_per_bin = 1 + (next->nchecks - 1) / bins; /* ceil(next->nchecks/bins) */
-	    size_t max_bin = 1 + (next->nchecks - 1) / checks_per_bin; /* ceil(next->nchecks/checks_per_bin) */
+	    items_per_bin = 1 + (next->nchecks - 1) / bins; /* ceil(next->nchecks/bins) */
+	    max_bin = 1 + (next->nchecks - 1) / items_per_bin; /* ceil(next->nchecks/items_per_bin) */
 	    for(round = 0; round < 2; round++) {
 		donebit = 2;
 		procbit = (1 << round);
@@ -347,13 +374,14 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			    continue;
 			}
 		    }
-		    size_t j = i * checks_per_bin;
-		    size_t max = j + checks_per_bin;
+		    j = i * items_per_bin;
+		    max = j + items_per_bin;
 		    if(max > next->nchecks) {
 			max = next->nchecks;
 		    }
 		    for(; j < max; j++) {
-			struct atxn_stub *stub = (struct atxn_stub *) arcp_load(&next->check_list[j].location->rcp);
+			struct atxn_stub *stub;
+			stub = (struct atxn_stub *) arcp_load(&next->check_list[j].location->rcp);
 			/* Make sure this hasn't been processed to ensure stub is correct value */
 			if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			    /* Someone else did this step */
@@ -379,8 +407,8 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 	    }
 	}
 	/* 4. Load stubs with prev value */
-	size_t updates_per_bin = 1 + (next->nupdates - 1) / bins; /* ceil(next->nupdates/bins) */
-	size_t max_bin = 1 + (next->nupdates - 1) / updates_per_bin; /* ceil(next->nupdates/updates_per_bin) */
+	items_per_bin = 1 + (next->nupdates - 1) / bins; /* ceil(next->nupdates/bins) */
+	max_bin = 1 + (next->nupdates - 1) / items_per_bin; /* ceil(next->nupdates/items_per_bin) */
 	for(round = 0; round < 2; round++) {
 	    donebit = 2 << bins;
 	    procbit = (1 << round) << bins;
@@ -394,13 +422,16 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			continue;
 		    }
 		}
-		size_t j = i * updates_per_bin;
-		size_t max = j + updates_per_bin;
+		j = i * items_per_bin;
+		max = j + items_per_bin;
 		if(max > next->nupdates) {
 		    max = next->nupdates;
 		}
 		for(; j < max; j++) {
-		    struct atxn_stub *oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
+		    struct atxn_stub *oldstub;
+		    struct arcp_region *oldvalue;
+
+		    oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
 		    if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			/* Someone else did this step */
@@ -408,7 +439,7 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			break;
 		    }
 		    /* Get old value and store it in previous */
-		    struct arcp_region *oldvalue = arcp_load_phantom(&oldstub->value);
+		    oldvalue = arcp_load_phantom(&oldstub->value);
 		    arcp_store(&next->update_list[j].stub->prev, oldvalue);
 		    /* Store clock value */
 		    atomic_store_explicit(&next->update_list[j].stub->clock, clock, memory_order_release);
@@ -434,13 +465,14 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 			continue;
 		    }
 		}
-		size_t j = i * updates_per_bin;
-		size_t max = j + updates_per_bin;
+		j = i * items_per_bin;
+		max = j + items_per_bin;
 		if(max > next->nupdates) {
 		    max = next->nupdates;
 		}
 		for(; j < max; j++) {
-		    struct atxn_stub *oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
+		    struct atxn_stub *oldstub;
+		    oldstub = (struct atxn_stub *) arcp_load(&next->update_list[j].location->rcp);
 		    /* Make sure this hasn't been processed to ensure oldstub is correct value */
 		    if((procstatus = atomic_load_explicit(&next->procstatus, memory_order_acquire)) & donebit) {
 			/* Someone else did this step */
@@ -449,17 +481,17 @@ enum atxn_status atxn_commit(struct atxn_handle *handle) {
 		    }
 		    /* Set to the current stub */
 		    arcp_compare_store(&next->update_list[j].location->rcp, oldstub,
-					  next->update_list[j].stub);
+				       next->update_list[j].stub);
 		    arcp_release(oldstub);
 		}
 		procstatus = atomic_fetch_or_explicit(&next->procstatus, donebit, memory_order_acq_rel) | donebit;
 	    }
 	}
-	if(atomic_load_explicit(&next->status, memory_order_release) != ATXN_PENDING) {
+	if(atomic_load_explicit(&next->status, memory_order_acquire) != ATXN_PENDING) {
 	    goto dequeue;
 	}
 	/* 6. Change clock to have stubs reflect new values */
-	unsigned int newclock = clock + 1;
+	newclock = clock + 1;
 	if(newclock == 0) {
 	    /* Disallow a zero-valued clock */
 	    newclock++;

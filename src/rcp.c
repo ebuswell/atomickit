@@ -65,20 +65,22 @@ static bool __arcp_try_release_destroy_lock(struct arcp_region *region) {
 }
 
 static void __arcp_try_destroy(struct arcp_region *region) {
-    struct arcp_weakref *stub = (struct arcp_weakref *) arcp_load(&region->weakref);
-    if(stub == NULL) {
+    void *ptr;
+    int16_t count;
+    struct arcp_weakref *weakref;
+    weakref = (struct arcp_weakref *) arcp_load(&region->weakref);
+    if(weakref == NULL) {
 	if(region->destroy != NULL) {
 	    region->destroy(region);
 	}
 	return;
     }
-    void *ptr = atomic_ptr_load_explicit(&stub->ptr, memory_order_consume);
-    int16_t count;
+    ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
 retry:
     switch(count = __ARCP_PTR2COUNT(ptr)) {
     default:
 	/* Transfer the count */
-	if(likely(atomic_ptr_compare_exchange_strong_explicit(&stub->ptr, &ptr, __ARCP_PTRDECOUNT(ptr),
+	if(likely(atomic_ptr_compare_exchange_strong_explicit(&weakref->ptr, &ptr, __ARCP_PTRDECOUNT(ptr),
 							      memory_order_acq_rel, memory_order_consume))) {
 	    __arcp_urefs(region, 0, count);
 	    if(likely(__arcp_try_release_destroy_lock(region))) {
@@ -89,7 +91,7 @@ retry:
 	goto retry;
     case 0:
 	/* set to __ARCP_COUNTMASK */
-	if(unlikely(!atomic_ptr_compare_exchange_strong_explicit(&stub->ptr, &ptr, (void *) (((uintptr_t) ptr) | __ARCP_COUNTMASK),
+	if(unlikely(!atomic_ptr_compare_exchange_strong_explicit(&weakref->ptr, &ptr, (void *) (((uintptr_t) ptr) | __ARCP_COUNTMASK),
 								 memory_order_acq_rel, memory_order_consume))) {
 	    goto retry;
 	}
@@ -103,19 +105,18 @@ retry:
 	    /* Otherwise, region->refcount has *become* equal to __ARCP_DESTROY_LOCK_BIT */
 	}
 	/* kill the reference */
-	if(unlikely(!atomic_ptr_compare_exchange_strong_explicit(&stub->ptr, &ptr, NULL,
+	if(unlikely(!atomic_ptr_compare_exchange_strong_explicit(&weakref->ptr, &ptr, NULL,
 								 memory_order_acq_rel, memory_order_consume))) {
 	    goto retry;
 	}
     }
-    struct arcp_weakref *weakref = (struct arcp_weakref *) arcp_exchange(&region->weakref, NULL);
+    arcp_store(&region->weakref, NULL);
     atomic_ptr_store_explicit(&region->weakref.ptr, weakref, memory_order_relaxed);
     if(region->destroy != NULL) {
 	region->destroy(region);
     }
-    arcp_release(weakref);
 abort:
-    arcp_release(stub);
+    arcp_release(weakref);
 }
 
 static void __arcp_destroy_weakref(struct arcp_weakref *stub) {
@@ -129,10 +130,12 @@ void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_re
 }
 
 int arcp_region_init_weakref(struct arcp_region *region) {
+    struct arcp_weakref *stub;
+
     if(region == NULL) {
 	return 0;
     }
-    struct arcp_weakref *stub = (struct arcp_weakref *) arcp_load_phantom(&region->weakref);
+    stub = (struct arcp_weakref *) arcp_load_phantom(&region->weakref);
     if(stub != NULL) {
 	return 0;
     }
@@ -170,11 +173,14 @@ void arcp_release(struct arcp_region *region) {
 }
 
 struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
+    void *ptr;
+    void *desired;
+    struct arcp_region *ret;
+
     if(weakref == NULL) {
 	return NULL;
     }
-    void *ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
-    void *desired;
+    ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
     do {
     retry:
 	switch(__ARCP_PTR2COUNT(ptr)) {
@@ -193,7 +199,7 @@ struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
 								memory_order_acq_rel, memory_order_consume)));
     ptr = desired;
     /* We have one reference */
-    struct arcp_region *ret = __ARCP_PTRDECOUNT(ptr);
+    ret = __ARCP_PTRDECOUNT(ptr);
     if(ret != NULL) {
 	__arcp_urefs(ret, 0, 1);
     }
@@ -216,7 +222,8 @@ struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
 }
 
 struct arcp_region *arcp_weakref_load_release(struct arcp_weakref *weakref) {
-    struct arcp_region *ret = arcp_weakref_load(weakref);
+    struct arcp_region *ret;
+    ret = arcp_weakref_load(weakref);
     arcp_release(weakref);
     return ret;
 }
@@ -229,7 +236,10 @@ void arcp_init(arcp_t *rcp, struct arcp_region *region) {
 }
 
 struct arcp_region *arcp_load(arcp_t *rcp) {
-    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+    void *ptr;
+    struct arcp_region *ret;
+
+    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
 	while(unlikely(__ARCP_PTR2COUNT(ptr) == __ARCP_COUNTMASK)) {
 	    /* Spinlock if too many threads are accessing this at once. */
@@ -240,12 +250,12 @@ struct arcp_region *arcp_load(arcp_t *rcp) {
 								memory_order_acq_rel, memory_order_consume)));
     ptr += 1;
     /* We have one reference */
-    struct arcp_region *ret = __ARCP_PTRDECOUNT(ptr);
+    ret = __ARCP_PTRDECOUNT(ptr);
     if(ret != NULL) {
 	__arcp_urefs(ret, 0, 1);
     }
     /* We have two references, try and remove the one stored on the pointer. */
-    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr -1,
+    while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr - 1,
 							      memory_order_acq_rel, memory_order_acquire))) {
 	/* Is the pointer still valid? */
 	if((__ARCP_PTRDECOUNT(ptr) != ret)
@@ -262,11 +272,14 @@ struct arcp_region *arcp_load(arcp_t *rcp) {
 }
 
 void arcp_store(arcp_t *rcp, struct arcp_region *region) {
+    void *ptr;
+    struct arcp_region *oldregion;
+
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    void *ptr = atomic_ptr_exchange(&rcp->ptr, region);
-    struct arcp_region *oldregion = __ARCP_PTRDECOUNT(ptr);
+    ptr = atomic_ptr_exchange(&rcp->ptr, region);
+    oldregion = __ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
 	if(__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr)) == 0) {
 	    __arcp_try_destroy(oldregion);
@@ -275,11 +288,14 @@ void arcp_store(arcp_t *rcp, struct arcp_region *region) {
 }
 
 struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region *region) {
+    void *ptr;
+    struct arcp_region *oldregion;
+
     if(region != NULL) {
 	__arcp_urefs(region, 1, 0);
     }
-    void *ptr = atomic_ptr_exchange_explicit(&rcp->ptr, region, memory_order_acq_rel);
-    struct arcp_region *oldregion = __ARCP_PTRDECOUNT(ptr);
+    ptr = atomic_ptr_exchange_explicit(&rcp->ptr, region, memory_order_acq_rel);
+    oldregion = __ARCP_PTRDECOUNT(ptr);
     if(oldregion != NULL) {
 	__arcp_urefs(oldregion, -1, __ARCP_PTR2COUNT(ptr) + 1);
     }
@@ -287,10 +303,12 @@ struct arcp_region *arcp_exchange(arcp_t *rcp, struct arcp_region *region) {
 }
 
 bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
+    void *ptr;
+
     if(newregion != NULL) {
 	__arcp_urefs(newregion, 1, 0);
     }
-    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
 	if(__ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */
@@ -311,10 +329,12 @@ bool arcp_compare_store(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_
 }
 
 bool arcp_compare_store_release(arcp_t *rcp, struct arcp_region *oldregion, struct arcp_region *newregion) {
+    void *ptr;
+
     if(newregion != NULL) {
 	__arcp_urefs(newregion, 1, -1);
     }
-    void *ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
+    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_acquire);
     do {
 	if(__ARCP_PTRDECOUNT(ptr) != oldregion) {
 	    /* fail */

@@ -44,7 +44,11 @@ int aqueue_init(aqueue_t *aqueue) {
 }
 
 int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
-    struct aqueue_node *node = amalloc(sizeof(struct aqueue_node));
+    struct aqueue_node *node;
+    struct aqueue_node *tail;
+    struct aqueue_node *next;
+
+    node = amalloc(sizeof(struct aqueue_node));
     if(node == NULL) {
 	return -1;
     }
@@ -52,8 +56,6 @@ int aqueue_enq(aqueue_t *aqueue, struct arcp_region *item) {
     arcp_init(&node->next, NULL);
     arcp_region_init(node, (void (*)(struct arcp_region *)) __aqueue_node_destroy);
 
-    struct aqueue_node *tail;
-    struct aqueue_node *next;
     for(;;) {
 	tail = (struct aqueue_node *) arcp_load(&aqueue->tail);
 	next = (struct aqueue_node *) arcp_load(&tail->next);

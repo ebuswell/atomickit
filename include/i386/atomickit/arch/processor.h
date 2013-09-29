@@ -28,9 +28,9 @@
 #ifndef ATOMICKIT_ARCH_YIELD_H
 #define ATOMICKIT_ARCH_YIELD_H 1
 
-/* REP NOP (PAUSE) is a good thing to insert into busy-wait loops. */
+/* REP NOP (PAUSE) Is a good thing to insert into busy-wait loops. */
 static inline void cpu_relax(void) {
-    asm volatile("rep; nop" ::: "memory");
+    __asm__ volatile("rep; nop" ::: "memory");
 }
 
 #endif /* ! ATOMICKIT_ARCH_YIELD_H */

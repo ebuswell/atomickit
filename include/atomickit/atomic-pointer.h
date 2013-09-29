@@ -34,7 +34,7 @@ typedef struct {
 
 #define ATOMIC_PTR_VAR_INIT(value) { ATOMIC_VAR_INIT((uintptr_t) (value)) }
 
-#define atomic_ptr_is_lock_free(obj) atomic_is_lock_free(obj)
+#define atomic_ptr_is_lock_free(obj) atomic_is_lock_free(&(obj)->uintptr)
 
 static inline void atomic_ptr_init(volatile atomic_ptr *object, void *value) {
     atomic_init(&object->uintptr, (uintptr_t) value);

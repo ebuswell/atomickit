@@ -35,6 +35,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdalign.h>
 #include <atomickit/atomic.h>
 #include <atomickit/atomic-pointer.h>
 
@@ -69,7 +70,7 @@ struct arcp_region {
 				    * to this region. */
     arcp_t weakref; /** Pointer to the weak reference for this region;
 		     * initially NULL. */
-} __attribute__((aligned(16)));
+};
 
 /**
  * Weak Reference for an Atomic Reference Counted Region
@@ -86,7 +87,7 @@ struct arcp_weakref {
 /* Used for miscellaneous alignment purposes */
 struct __arcp_region_data {
     struct arcp_region;
-    uint8_t data[] __attribute__((aligned(16))); /** User-defined data. */
+    uint8_t data[]; /** User-defined data. */
 };
 
 /**
@@ -97,7 +98,7 @@ struct __arcp_region_data {
  * will be equal to `ARCP_ALIGN - 1`. Check out will block for all
  * threads above this threshold.
  */
-#define ARCP_ALIGN __alignof__(struct arcp_region *)
+#define ARCP_ALIGN alignof(struct arcp_region *)
 
 /**
  * The size of the reference counted region that is not the user data.

@@ -63,15 +63,17 @@ static void test_atomic_float_load() {
 }
 
 static void test_atomic_float_exchange_explicit() {
+    float fr;
     CHECKPOINT();
-    float fr = atomic_float_exchange_explicit(&afloat, 3.1f, memory_order_relaxed);
+    fr = atomic_float_exchange_explicit(&afloat, 3.1f, memory_order_relaxed);
     ASSERT(fr == 2.1f);
     ASSERT(atomic_float_load_explicit(&afloat, memory_order_relaxed) == 3.1f);
 }
 
 static void test_atomic_float_exchange() {
+    float fr;
     CHECKPOINT();
-    float fr = atomic_float_exchange(&afloat, 3.1f);
+    fr = atomic_float_exchange(&afloat, 3.1f);
     ASSERT(fr == 2.1f);
     ASSERT(atomic_float_load_explicit(&afloat, memory_order_relaxed) == 3.1f);
 }
@@ -153,15 +155,17 @@ static void test_atomic_double_load() {
 }
 
 static void test_atomic_double_exchange_explicit() {
+    double dr;
     CHECKPOINT();
-    double dr = atomic_double_exchange_explicit(&adouble, 3.1, memory_order_relaxed);
+    dr = atomic_double_exchange_explicit(&adouble, 3.1, memory_order_relaxed);
     ASSERT(dr == 2.1);
     ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
 }
 
 static void test_atomic_double_exchange() {
+    double dr;
     CHECKPOINT();
-    double dr = atomic_double_exchange(&adouble, 3.1);
+    dr = atomic_double_exchange(&adouble, 3.1);
     ASSERT(dr == 2.1);
     ASSERT(atomic_double_load_explicit(&adouble, memory_order_relaxed) == 3.1);
 }
@@ -208,11 +212,6 @@ int run_atomic_float_h_test_suite() {
     void (*atomic_float_blank_tests[])() = { test_atomic_float_init, test_atomic_float_is_lock_free, NULL };
     char *atomic_float_blank_test_names[] = { "atomic_float_init", "atomic_float_is_lock_free", NULL };
 
-    r = run_test_suite(NULL, atomic_float_blank_test_names, atomic_float_blank_tests);
-    if(r != 0) {
-	return r;
-    }
-
     void (*atomic_float_tests[])() = { test_atomic_float_store_explicit, test_atomic_float_store,
 				       test_atomic_float_load_explicit, test_atomic_float_load,
 				       test_atomic_float_exchange_explicit, test_atomic_float_exchange,
@@ -227,18 +226,8 @@ int run_atomic_float_h_test_suite() {
 					"atomic_float_compare_exchange_strong",
 					"atomic_float_compare_exchange_weak_explicit",
 					"atomic_float_compare_exchange_weak", NULL };
-    r = run_test_suite(test_atomic_float_fixture, atomic_float_test_names, atomic_float_tests);
-    if(r != 0) {
-	return r;
-    }
-
     void (*atomic_double_blank_tests[])() = { test_atomic_double_init, test_atomic_double_is_lock_free, NULL };
     char *atomic_double_blank_test_names[] = { "atomic_double_init", "atomic_double_is_lock_free", NULL };
-
-    r = run_test_suite(NULL, atomic_double_blank_test_names, atomic_double_blank_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*atomic_double_tests[])() = { test_atomic_double_store_explicit, test_atomic_double_store,
 				       test_atomic_double_load_explicit, test_atomic_double_load,
@@ -254,6 +243,22 @@ int run_atomic_float_h_test_suite() {
 					"atomic_double_compare_exchange_strong",
 					"atomic_double_compare_exchange_weak_explicit",
 					"atomic_double_compare_exchange_weak", NULL };
+
+    r = run_test_suite(NULL, atomic_float_blank_test_names, atomic_float_blank_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(test_atomic_float_fixture, atomic_float_test_names, atomic_float_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(NULL, atomic_double_blank_test_names, atomic_double_blank_tests);
+    if(r != 0) {
+	return r;
+    }
+
     r = run_test_suite(test_atomic_double_fixture, atomic_double_test_names, atomic_double_tests);
     if(r != 0) {
 	return r;

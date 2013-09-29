@@ -44,7 +44,7 @@
 #define PTR_COUNT(ptr) (((uintptr_t) (ptr)) & ((uintptr_t) (MIN_SIZE - 1)))
 
 /* #define AMALLOC_DEBUG 1 */
-#define AMALLOC_VALGRIND_DEBUG 1
+/* #define AMALLOC_VALGRIND_DEBUG 1 */
 
 #ifndef AMALLOC_VALGRIND_DEBUG
 
@@ -68,9 +68,10 @@ static volatile atomic_ptr glbl_fstack[NSIZES] = {
 /* Transforms a size into the bin number for that size. Conceptually:
  * ceil(log2(size)) - log2(MIN_SIZE). */
 static inline int size2bin(size_t size) {
+    int r;
     size--;
     size >>= MIN_SIZE_LOG2 - 1;
-    int r = 0;
+    r = 0;
     while(size >>= 1) {
 	r++;
     }
@@ -119,7 +120,8 @@ static void am_perror(const char *msg) {
 
 /* Allocate pages directly from the OS. Uses mmap. */
 static void *os_alloc(size_t size) {
-    void *ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    void *ptr;
+    ptr = mmap(NULL, PAGE_CEIL(size), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(ptr == MAP_FAILED) {
 	DEBUG_PRINTF("Failed allocating %zd bytes via os_alloc\n", size);
 	return NULL;
@@ -140,8 +142,9 @@ static void os_free(void *ptr, size_t size) {
 }
 
 static bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsize, size_t newsize) {
-    size_t c_oldsize = PAGE_CEIL(oldsize);
-    size_t c_newsize = PAGE_CEIL(newsize);
+    size_t c_oldsize, c_newsize;
+    c_oldsize = PAGE_CEIL(oldsize);
+    c_newsize = PAGE_CEIL(newsize);
     if(c_oldsize == c_newsize) {
 	return true;
     } else if(c_oldsize > c_newsize) {
@@ -160,12 +163,15 @@ static bool os_tryrealloc(void *ptr __attribute__((unused)), size_t oldsize, siz
 
 /* Reallocate a memory region directly from the OS. */
 static void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
-    size_t c_oldsize = PAGE_CEIL(oldsize);
-    size_t c_newsize = PAGE_CEIL(newsize);
+    int r;
+    void *ret;
+    size_t c_oldsize, c_newsize;
+    c_oldsize = PAGE_CEIL(oldsize);
+    c_newsize = PAGE_CEIL(newsize);
     if(c_oldsize == c_newsize) {
 	return ptr;
     } else if(c_oldsize > c_newsize) {
-	int r = munmap(ptr + c_newsize, c_oldsize - c_newsize);
+	r = munmap(ptr + c_newsize, c_oldsize - c_newsize);
 	if(r != 0) {
 	    DEBUG_PRINTF("Failed changing allocation from %zd bytes at %p to %zd bytes at %p via os_tryrealloc\n", oldsize, ptr, newsize, ptr);
 	    STACKTRACE();
@@ -175,13 +181,13 @@ static void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
 	return ptr;
     }
     /* Otherwise we're growing the region. */
-    void *ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    ret = mmap(NULL, c_newsize, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     if(ret == MAP_FAILED) {
 	DEBUG_PRINTF("Failed changing allocation from %zd bytes at %p to %zd bytes at ? via os_tryrealloc\n", oldsize, ptr, newsize);
 	return NULL;
     }
     memcpy(ret, ptr, oldsize);
-    int r = munmap(ptr, c_oldsize);
+    r = munmap(ptr, c_oldsize);
     if(r != 0) {
 	DEBUG_PRINTF("Failed to unmap old pointer at %p\n", ptr);
 	if(munmap(ret, c_newsize) != 0) {
@@ -216,15 +222,16 @@ static void __destroy_debug_alloc_list(struct debug_alloc_list *list) {
 static void check_free(void *ptr) {
     struct debug_alloc_list *list;
     struct debug_alloc_list *newlist;
+    size_t l, u, i;
     do {
 	list = (struct debug_alloc_list *) arcp_load(&debug_alloc);
 	if(list == NULL) {
 	    DEBUG_PRINTF("Trying to free %p but nothing has been allocated\n", ptr);
 	    STACKTRACE();
 	}
-	size_t l = 0;
-	size_t u = list->len;
-	size_t i = 0;
+	l = 0;
+	u = list->len;
+	i = 0;
 	while(l < u) {
 	    i = (l + u) / 2;
 	    if(((uintptr_t) ptr) < list->ptrs[i]) {
@@ -253,6 +260,7 @@ static void check_free(void *ptr) {
 static void check_alloc(void *ptr) {
     struct debug_alloc_list *list;
     struct debug_alloc_list *newlist;
+    size_t l, u, i;
     do {
 	list = (struct debug_alloc_list *) arcp_load(&debug_alloc);
 	if(list == NULL) {
@@ -265,9 +273,9 @@ static void check_alloc(void *ptr) {
 	    newlist->ptrs[0] = (uintptr_t) ptr;
 	    newlist->len = 1;
 	} else {
-	    size_t l = 0;
-	    size_t u = list->len;
-	    size_t i = 0;
+	    l = 0;
+	    u = list->len;
+	    i = 0;
 	    while(l < u) {
 		i = (l + u) / 2;
 		if(((uintptr_t) ptr) < list->ptrs[i]) {
@@ -345,10 +353,12 @@ static void check_alloc(void *ptr) {
 /* Atomically pop a memory region of the specified size off the
  * stack. Returns NULL if the stack for that memory region is empty. */
 static inline void *fstack_pop(int bin) {
+    struct fstack_item *item;
     for(;;) {
+	void *next;
 	/* Acquire the top of the stack and update its reference
 	 * count. */
-	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_consume);
+	next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_consume);
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
@@ -374,7 +384,7 @@ static inline void *fstack_pop(int bin) {
 	     * again. */
 	    continue;
 	}
-	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next);
+	item = (struct fstack_item *) PTR_DECOUNT(next);
 # ifdef AMALLOC_DEBUG
 	if(bin2size(bin) >= PAGE_SIZE) {
 	    if((((uintptr_t) item) & (((uintptr_t) PAGE_SIZE) - 1))
@@ -429,14 +439,17 @@ static inline void *fstack_pop(int bin) {
 }
 
 static void fstack_push(int bin, void *ptr) {
-    struct fstack_item *new_item = (struct fstack_item *) ptr;
+    struct fstack_item *new_item;
+    struct fstack_item *item;
+    new_item = (struct fstack_item *) ptr;
     /* Set the initial refcount to zero. */
     atomic_init(&new_item->refcount, 0);
     for(;;) {
+	void *next;
 	/* Get the top of the stack; we have to update reference count
 	 * since we act like pop if there's more than our own
 	 * reference count. */
-	void *next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
+	next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
@@ -460,7 +473,7 @@ static void fstack_push(int bin, void *ptr) {
 	    /* Something else was added before we could add this; try again. */
 	    continue;
 	}
-	struct fstack_item *item = (struct fstack_item *) PTR_DECOUNT(next);
+	item = (struct fstack_item *) PTR_DECOUNT(next);
 # ifdef AMALLOC_DEBUG
 	if(bin2size(bin) >= PAGE_SIZE) {
 	    if((((uintptr_t) item) & (((uintptr_t) PAGE_SIZE) - 1))
@@ -526,6 +539,8 @@ static void fstack_push(int bin, void *ptr) {
 
 void *amalloc(size_t size) {
     void *ret;
+    int bin;
+    int i;
     if(size == 0) {
 	return NULL;
     }
@@ -534,8 +549,7 @@ void *amalloc(size_t size) {
 	CHECK_ALLOC(ret);
 	return ret;
     }
-    int bin = size2bin(size);
-    int i;
+    bin = size2bin(size);
     for(i = bin; i < NSIZES; i++) {
 	if((ret = fstack_pop(i)) != NULL) {
 	    goto breakdown_chunk;
@@ -629,6 +643,7 @@ bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
 }
 
 void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
+    void *ret;
     MAYBE_CHECK_FREE(ptr, oldsize);
     MAYBE_CHECK_ALLOC(ptr, oldsize);
     if(oldsize == 0) {
@@ -644,7 +659,7 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 	return ptr;
     }
     if(oldsize > OS_THRESH && newsize > OS_THRESH) {
-	void *ret = os_realloc(ptr, oldsize, newsize);
+	ret = os_realloc(ptr, oldsize, newsize);
 	if(ret != NULL) {
 	    CHECK_FREE(ptr);
 	    CHECK_ALLOC(ret);
@@ -670,7 +685,7 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 	    return ptr;
 	}
     }
-    void *ret = amalloc(newsize);
+    ret = amalloc(newsize);
     if(ret == NULL) {
 	return NULL;
     }
@@ -688,7 +703,7 @@ void *amalloc(size_t size) {
 }
 
 void afree(void *ptr, size_t size __attribute__((unused))) {
-    return free(ptr);
+    free(ptr);
 }
 
 bool atryrealloc(void *ptr __attribute__((unused)), size_t oldsize __attribute__((unused)), size_t newsize __attribute__((unused))) {

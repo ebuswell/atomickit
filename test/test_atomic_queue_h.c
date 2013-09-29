@@ -64,16 +64,19 @@ static aqueue_t aqueue;
 
 /****************************/
 static void test_aqueue_init() {
+    int r;
+    struct arcp_region *rg1;
     CHECKPOINT();
-    int r = aqueue_init(&aqueue);
+    r = aqueue_init(&aqueue);
     ASSERT(r == 0);
-    struct arcp_region *rg1 = aqueue_deq(&aqueue);
+    rg1 = aqueue_deq(&aqueue);
     ASSERT(rg1 == NULL);
 }
 
 /****************************/
 
 static void test_aqueue_init_fixture(void (*test)()) {
+    int r;
     region1_destroyed = false;
     region2_destroyed = false;
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
@@ -82,7 +85,7 @@ static void test_aqueue_init_fixture(void (*test)()) {
     strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
-    int r = aqueue_init(&aqueue);
+    r = aqueue_init(&aqueue);
     if(r != 0) {
 	UNRESOLVED("aqueue_init failed");
     }
@@ -95,8 +98,9 @@ static void test_aqueue_destroy_empty() {
 }
 
 static void test_aqueue_enq() {
+    int r;
     CHECKPOINT();
-    int r = aqueue_enq(&aqueue, region1);
+    r = aqueue_enq(&aqueue, region1);
     ASSERT(r == 0);
     r = aqueue_enq(&aqueue, region2);
     ASSERT(r == 0);
@@ -116,6 +120,7 @@ static void test_aqueue_enq() {
 /****************************/
 
 static void test_aqueue_full_fixture(void (*test)()) {
+    int r;
     region1_destroyed = false;
     region2_destroyed = false;
     region1 = alloca(ARCP_REGION_OVERHEAD + 14);
@@ -124,7 +129,7 @@ static void test_aqueue_full_fixture(void (*test)()) {
     strcpy((char *) ARCP_REGION2DATA(region2), ptrtest.string2);
     arcp_region_init(region1, destroy_region1);
     arcp_region_init(region2, destroy_region2);
-    int r = aqueue_init(&aqueue);
+    r = aqueue_init(&aqueue);
     if(r != 0) {
 	UNRESOLVED("aqueue_init failed");
     }
@@ -149,6 +154,7 @@ static void test_aqueue_destroy_full() {
 }
 
 static void test_aqueue_deq() {
+    void *nope;
     arcp_release(region1);
     CHECKPOINT();
     arcp_release(region2);
@@ -159,7 +165,7 @@ static void test_aqueue_deq() {
     region2 = aqueue_deq(&aqueue);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region2), ptrtest.string2) == 0);
     ASSERT(!region2_destroyed);
-    void *nope = aqueue_deq(&aqueue);
+    nope = aqueue_deq(&aqueue);
     ASSERT(nope == NULL);
 }
 
@@ -186,6 +192,7 @@ static void test_aqueue_compare_deq() {
 }
 
 static void test_aqueue_peek() {
+    struct arcp_region *region1_2;
     arcp_release(region1);
     CHECKPOINT();
     arcp_release(region2);
@@ -195,7 +202,7 @@ static void test_aqueue_peek() {
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1), ptrtest.string1) == 0);
     arcp_release(region1);
     CHECKPOINT();
-    struct arcp_region *region1_2 = aqueue_peek(&aqueue);
+    region1_2 = aqueue_peek(&aqueue);
     ASSERT(!region1_destroyed);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(region1_2), ptrtest.string1) == 0);
     arcp_release(region1_2);
@@ -211,19 +218,11 @@ int run_atomic_queue_h_test_suite() {
     int r;
     void (*void_tests[])() = { test_aqueue_init, NULL };
     char *void_test_names[] = { "aqueue_init", NULL };
-    r = run_test_suite(NULL, void_test_names, void_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*aqueue_init_tests[])() = { test_aqueue_destroy_empty, test_aqueue_enq,
 				      NULL };
     char *aqueue_init_test_names[] = { "aqueue_destroy_empty", "aqueue_enq",
 				       NULL };
-    r = run_test_suite(test_aqueue_init_fixture, aqueue_init_test_names, aqueue_init_tests);
-    if(r != 0) {
-	return r;
-    }
 
     void (*aqueue_full_tests[])() = { test_aqueue_destroy_full,
 				      test_aqueue_deq,
@@ -233,6 +232,17 @@ int run_atomic_queue_h_test_suite() {
 				       "aqueue_deq",
 				       "aqueue_compare_deq",
 				       "aqueue_peek", NULL };
+
+    r = run_test_suite(NULL, void_test_names, void_tests);
+    if(r != 0) {
+	return r;
+    }
+
+    r = run_test_suite(test_aqueue_init_fixture, aqueue_init_test_names, aqueue_init_tests);
+    if(r != 0) {
+	return r;
+    }
+
     r = run_test_suite(test_aqueue_full_fixture, aqueue_full_test_names, aqueue_full_tests);
     if(r != 0) {
 	return r;

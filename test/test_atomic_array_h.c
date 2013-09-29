@@ -71,8 +71,9 @@ static struct aary *array;
 
 /*************************/
 static void test_aary_create() {
+    struct aary *ary;
     CHECKPOINT();
-    struct aary *ary = aary_create(0);
+    ary = aary_create(0);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 0);
     arcp_release(ary);
@@ -178,8 +179,9 @@ static void test_aary_populate_part_fixture(void (*test)()) {
 }
 
 static void test_aary_load() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_load(array, 0);
+    rg = aary_load(array, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     arcp_release(region1);
@@ -191,8 +193,9 @@ static void test_aary_load() {
 }
 
 static void test_aary_last() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_last(array);
+    rg = aary_last(array);
     ASSERT(rg == region2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string2) == 0);
     arcp_release(region2);
@@ -204,8 +207,9 @@ static void test_aary_last() {
 }
 
 static void test_aary_first() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_first(array);
+    rg = aary_first(array);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     arcp_release(region1);
@@ -217,8 +221,9 @@ static void test_aary_first() {
 }
 
 static void test_aary_load_phantom() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_load_phantom(array, 0);
+    rg = aary_load_phantom(array, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     arcp_release(region1);
@@ -228,8 +233,9 @@ static void test_aary_load_phantom() {
 }
 
 static void test_aary_first_phantom() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_first_phantom(array);
+    rg = aary_first_phantom(array);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     arcp_release(region1);
@@ -239,8 +245,9 @@ static void test_aary_first_phantom() {
 }
 
 static void test_aary_last_phantom() {
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct arcp_region *rg = aary_last_phantom(array);
+    rg = aary_last_phantom(array);
     ASSERT(rg == region2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string2) == 0);
     arcp_release(region2);
@@ -250,10 +257,12 @@ static void test_aary_last_phantom() {
 }
 
 static void test_aary_dup() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup(array);
+    ary = aary_dup(array);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -274,11 +283,13 @@ static void test_aary_dup() {
 }
 
 static void test_aary_insert() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_insert(array, 1, region3);
+    ary = aary_insert(array, 1, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -303,11 +314,13 @@ static void test_aary_insert() {
 }
 
 static void test_aary_append() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_append(array, region3);
+    ary = aary_append(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -332,11 +345,13 @@ static void test_aary_append() {
 }
 
 static void test_aary_prepend() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_prepend(array, region3);
+    ary = aary_prepend(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string3) == 0);
     ASSERT(!region3_destroyed);
@@ -361,11 +376,13 @@ static void test_aary_prepend() {
 }
 
 static void test_aary_dup_insert() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_insert(array, 1, region3);
+    ary = aary_dup_insert(array, 1, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -393,11 +410,13 @@ static void test_aary_dup_insert() {
 }
 
 static void test_aary_dup_append() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_append(array, region3);
+    ary = aary_dup_append(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -425,11 +444,13 @@ static void test_aary_dup_append() {
 }
 
 static void test_aary_dup_prepend() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_prepend(array, region3);
+    ary = aary_dup_prepend(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string3) == 0);
     ASSERT(!region3_destroyed);
@@ -457,9 +478,10 @@ static void test_aary_dup_prepend() {
 }
 
 static void test_aary_set_add1() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_set_add(array, region2);
+    ary = aary_set_add(array, region2);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -474,9 +496,10 @@ static void test_aary_set_add1() {
 }
 
 static void test_aary_set_add2() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_set_add(array, region3);
+    ary = aary_set_add(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
     ASSERT(!region1_destroyed);
@@ -495,9 +518,10 @@ static void test_aary_set_add2() {
 }
 
 static void test_aary_dup_set_add1() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_dup_set_add(array, region2);
+    ary = aary_dup_set_add(array, region2);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -515,9 +539,10 @@ static void test_aary_dup_set_add1() {
 }
 
 static void test_aary_dup_set_add2() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_dup_set_add(array, region3);
+    ary = aary_dup_set_add(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 3);
     ASSERT(!region1_destroyed);
@@ -539,9 +564,10 @@ static void test_aary_dup_set_add2() {
 }
 
 static void test_aary_set_remove1() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_set_remove(array, region3);
+    ary = aary_set_remove(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -556,9 +582,10 @@ static void test_aary_set_remove1() {
 }
 
 static void test_aary_dup_set_remove1() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_dup_set_remove(array, region3);
+    ary = aary_dup_set_remove(array, region3);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -609,11 +636,13 @@ static void test_aary_populate_full_fixture(void (*test)()) {
 }
 
 static void test_aary_remove() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_remove(array, 1);
+    ary = aary_remove(array, 1);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -634,11 +663,13 @@ static void test_aary_remove() {
 }
 
 static void test_aary_pop() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_pop(array);
+    ary = aary_pop(array);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -659,11 +690,13 @@ static void test_aary_pop() {
 }
 
 static void test_aary_shift() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_shift(array);
+    ary = aary_shift(array);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string2) == 0);
     ASSERT(!region2_destroyed);
@@ -684,11 +717,13 @@ static void test_aary_shift() {
 }
 
 static void test_aary_dup_remove() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_remove(array, 1);
+    ary = aary_dup_remove(array, 1);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -713,11 +748,13 @@ static void test_aary_dup_remove() {
 }
 
 static void test_aary_dup_pop() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_pop(array);
+    ary = aary_dup_pop(array);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region1);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string1) == 0);
     ASSERT(!region1_destroyed);
@@ -742,11 +779,13 @@ static void test_aary_dup_pop() {
 }
 
 static void test_aary_dup_shift() {
+    struct aary *ary;
+    struct arcp_region *rg;
     CHECKPOINT();
-    struct aary *ary = aary_dup_shift(array);
+    ary = aary_dup_shift(array);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
-    struct arcp_region *rg = aary_load_phantom(ary, 0);
+    rg = aary_load_phantom(ary, 0);
     ASSERT(rg == region2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string2) == 0);
     ASSERT(!region2_destroyed);
@@ -796,12 +835,15 @@ static int aary_strcompar(const struct arcp_region *a, const struct arcp_region 
 }
 
 static void test_aary_sort() {
+    struct arcp_region *rg1;
+    struct arcp_region *rg2;
+    struct arcp_region *rg3;
     CHECKPOINT();
     aary_sort(array, aary_strcompar);
     ASSERT(aary_length(array) == 3);
-    struct arcp_region *rg1 = aary_load_phantom(array, 0);
-    struct arcp_region *rg2 = aary_load_phantom(array, 1);
-    struct arcp_region *rg3 = aary_load_phantom(array, 2);
+    rg1 = aary_load_phantom(array, 0);
+    rg2 = aary_load_phantom(array, 1);
+    rg3 = aary_load_phantom(array, 2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), (char *) ARCP_REGION2DATA(rg2)) <= 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg2), (char *) ARCP_REGION2DATA(rg3)) <= 0);
     ASSERT(!region1_destroyed);
@@ -825,12 +867,15 @@ static int aary_strcompar_r(const struct arcp_region *a, const struct arcp_regio
 
 static void test_aary_sort_r() {
     int direction = 1;
+    struct arcp_region *rg1;
+    struct arcp_region *rg2;
+    struct arcp_region *rg3;
     CHECKPOINT();
     aary_sort_r(array, (int (*)(const struct arcp_region *, const struct arcp_region *, void *)) aary_strcompar_r, &direction);
     ASSERT(aary_length(array) == 3);
-    struct arcp_region *rg1 = aary_load_phantom(array, 0);
-    struct arcp_region *rg2 = aary_load_phantom(array, 1);
-    struct arcp_region *rg3 = aary_load_phantom(array, 2);
+    rg1 = aary_load_phantom(array, 0);
+    rg2 = aary_load_phantom(array, 1);
+    rg3 = aary_load_phantom(array, 2);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg1), (char *) ARCP_REGION2DATA(rg2)) <= 0);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg2), (char *) ARCP_REGION2DATA(rg3)) <= 0);
     ASSERT(!region1_destroyed);
@@ -860,9 +905,10 @@ static void test_aary_sort_r() {
 }
 
 static void test_aary_reverse() {
+    struct arcp_region *rg;
     CHECKPOINT();
     aary_reverse(array);
-    struct arcp_region *rg = aary_load_phantom(array, 0);
+    rg = aary_load_phantom(array, 0);
     ASSERT(rg == region3);
     ASSERT(strcmp((char *) ARCP_REGION2DATA(rg), ptrtest.string3) == 0);
     ASSERT(!region3_destroyed);
@@ -887,9 +933,10 @@ static void test_aary_reverse() {
 }
 
 static void test_aary_set_remove2() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_set_remove(array, region2);
+    ary = aary_set_remove(array, region2);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -907,9 +954,10 @@ static void test_aary_set_remove2() {
 }
 
 static void test_aary_dup_set_remove2() {
+    struct aary *ary;
     CHECKPOINT();
     aary_sortx(array);
-    struct aary *ary = aary_dup_set_remove(array, region2);
+    ary = aary_dup_set_remove(array, region2);
     ASSERT(ary != NULL);
     ASSERT(aary_length(ary) == 2);
     ASSERT(!region1_destroyed);
@@ -935,17 +983,9 @@ int run_atomic_array_h_test_suite() {
     int r;
     void (*void_tests[])() = { test_aary_create, NULL };
     char *void_test_names[] = { "aary_create", NULL };
-    r = run_test_suite(NULL, void_test_names, void_tests);
-    if(r != 0) {
-    	return r;
-    }
 
     void (*init_tests[])() = { test_aary_length, test_aary_store, test_aary_storefirst, test_aary_storelast, NULL };
     char *init_test_names[] = { "aary_length", "aary_store", "aary_storefirst", "aary_storelast", NULL };
-    r = run_test_suite(test_aary_init_fixture, init_test_names, init_tests);
-    if(r != 0) {
-    	return r;
-    }
 
     void (*populate_part_tests[])() = { test_aary_load, test_aary_last, test_aary_first,
 					test_aary_load_phantom, test_aary_first_phantom, test_aary_last_phantom,
@@ -963,10 +1003,6 @@ int run_atomic_array_h_test_suite() {
 					 "aary_dup_set_add1", "aary_dup_set_add2", "aary_set_remove1",
 					 "aary_dup_set_remove1", "aary_set_contains",
 					 NULL };
-    r = run_test_suite(test_aary_populate_part_fixture, populate_part_test_names, populate_part_tests);
-    if(r != 0) {
-    	return r;
-    }
 
     void (*populate_full_tests[])() = { test_aary_remove, test_aary_pop, test_aary_shift,
 					test_aary_dup_remove, test_aary_dup_pop, test_aary_dup_shift,
@@ -980,6 +1016,22 @@ int run_atomic_array_h_test_suite() {
 					 "aary_reverse", "aary_set_remove2",
 					 "aary_dup_set_remove2",
 					 NULL };
+
+    r = run_test_suite(NULL, void_test_names, void_tests);
+    if(r != 0) {
+    	return r;
+    }
+
+    r = run_test_suite(test_aary_init_fixture, init_test_names, init_tests);
+    if(r != 0) {
+    	return r;
+    }
+
+    r = run_test_suite(test_aary_populate_part_fixture, populate_part_test_names, populate_part_tests);
+    if(r != 0) {
+    	return r;
+    }
+
     r = run_test_suite(test_aary_populate_full_fixture, populate_full_test_names, populate_full_tests);
     if(r != 0) {
     	return r;

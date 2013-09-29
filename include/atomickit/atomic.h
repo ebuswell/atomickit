@@ -47,7 +47,8 @@
 #ifdef HAVE_STDATOMIC_H
 # include <stdatomic.h>
 #else
-# include <atomickit/arch/compat.h>
+/*# include <atomickit/arch/compat.h>*/
+# include <atomickit/compat-gcc.h>
 #endif
 
 #ifndef cpu_relax

@@ -684,8 +684,8 @@ typedef struct {
     case memory_order_release:						\
     case memory_order_acq_rel:						\
     if((failure) == memory_order_seq_cst) {				\
-	typeof(expected) __expected = (expected);			\
-	typeof(object) __object = (object);				\
+	__typeof__(expected) __expected = (expected);			\
+	__typeof__(object) __object = (object);				\
 	__ret2 = __atomic_compare_exchange(__object, __expected, (desired), ""); \
 	if(!__ret2) {							\
 	    *__expected = __atomic_load_lock(__object);			\

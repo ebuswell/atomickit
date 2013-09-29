@@ -88,7 +88,7 @@ enum atxn_status {
     ATXN_FAILURE, /** The conditions of the transaction could not be
 		    * fulfilled due to one of the acquired things
 		    * having changed. */
-    ATXN_ERROR, /** There was an error processing the transaction. */
+    ATXN_ERROR /** There was an error processing the transaction. */
 };
 
 /**

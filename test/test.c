@@ -66,8 +66,9 @@ int test_results_push(struct test_result *result) {
 	test_results->nresults = 0;
 	test_results->results_capacity = TEST_RESULT_LIST_INITIAL_SIZE;
     } else if(test_results->nresults == test_results->results_capacity) {
+	struct test_result_list *new_test_results;
 	test_results->results_capacity *= 2;
-	struct test_result_list *new_test_results = realloc(test_results, sizeof(struct test_result_list) + (test_results->results_capacity - 1) * sizeof(struct test_result *));
+	new_test_results = realloc(test_results, sizeof(struct test_result_list) + (test_results->results_capacity - 1) * sizeof(struct test_result *));
 	if(new_test_results == NULL) {
 	    test_results->results_capacity /= 2;
 	    return -1;
@@ -79,7 +80,8 @@ int test_results_push(struct test_result *result) {
 }
 
 struct test_result *test_result_create(char *test_name, enum test_status status, char *explanation, char *file, int line) {
-    struct test_result *result = malloc(sizeof(struct test_result));
+    struct test_result *result;
+    result = malloc(sizeof(struct test_result));
     if(result == NULL) {
 	return NULL;
     }
@@ -128,7 +130,8 @@ void test_result_free(struct test_result *result) {
 
 int no_test(char *test_name, enum test_status result, char *explanation) {
     int r;
-    struct test_result *myresult = test_result_create(test_name, result, explanation, NULL, 0);
+    struct test_result *myresult;
+    myresult = test_result_create(test_name, result, explanation, NULL, 0);
     if(myresult == NULL) {
 	return -1;
     }
@@ -145,7 +148,8 @@ static int test_set_error(int myerrno, char *explanation, struct test_result *re
 	free(result->explanation);
     }
     if(myerrno != 0) {
-	char *se = strerror(errno);
+	char *se;
+	se = strerror(errno);
 	result->explanation = malloc(strlen(explanation) + strlen(": ") + strlen(se) + 1);
 	if(result->explanation == NULL) {
 	    test_result_free(result);
@@ -174,7 +178,8 @@ void checkpoint_test_fork(char *file, int line) {
 void checkpoint_test_nofork(char *file, int line) {
     file = strdup(file);
     if(file == NULL) {
-	int r = test_set_error(0, "Could not strdup file", c_test_res);
+	int r;
+	r = test_set_error(0, "Could not strdup file", c_test_res);
 	longjmp(test_end_jmp, r == 0 ? 1 : -1);
     }
     if(c_test_res->file != NULL) {
@@ -186,6 +191,7 @@ void checkpoint_test_nofork(char *file, int line) {
 
 void end_test_fork(enum test_status status, char *explanation) {
     const char *format;
+    int ret;
     switch(status) {
     case TEST_PASS:
 	format = "PASS:%s\n";
@@ -203,7 +209,7 @@ void end_test_fork(enum test_status status, char *explanation) {
     default:
 	format = "UNRESOLVED:%s\n";
     }
-    int ret = EXIT_SUCCESS;
+    ret = EXIT_SUCCESS;
     if(fprintf(test_writer, format, explanation) < 0) {
 	ret = EXIT_FAILURE;
     }
@@ -224,11 +230,11 @@ static void end_test_nofork(enum test_status status, char *explanation) {
 }
 
 static int run_test_nofork(void (*fixture)(void (*)()), char *test_name, void (*test)()) {
+    int r;
     c_test_res = test_result_create(test_name, TEST_PASS, NULL, NULL, 0);
     if(c_test_res == NULL) {
 	return -1;
     }
-    int r;
     if((r = setjmp(test_end_jmp)) == 0) {
 	r = 1;
 	if(fixture != NULL) {
@@ -257,17 +263,21 @@ static int test_parse_line(char *line, struct test_result *result) {
 	return 0;
     }
     if(strncmp(line, "CHECKPOINT:", strlen("CHECKPOINT:")) == 0) {
-	char *file = line + strlen("CHECKPOINT:");
-	char *lineno = strchr(file, ':');
+	char *file;
+	char *lineno;
+	char *lineno_end;
+	unsigned long lineno_int;
+	file = line + strlen("CHECKPOINT:");
+	lineno = strchr(file, ':');
 	if(lineno == NULL) {
 	    return test_set_error(0, "Failure to parse child CHECKPOINT file name", result);
 	}
 	*lineno++ = '\0';
-	char *lineno_end = strchr(lineno, '\n');
+	lineno_end = strchr(lineno, '\n');
 	if(lineno_end != NULL) {
 	    *lineno_end = '\0';
 	}
-	unsigned long lineno_int = strtoul(lineno, &lineno_end, 0);
+	lineno_int = strtoul(lineno, &lineno_end, 0);
 	if(*lineno_end != '\0') {
 	    return test_set_error(0, "Failure to parse child CHECKPOINT line number", result);
 	}
@@ -284,7 +294,9 @@ static int test_parse_line(char *line, struct test_result *result) {
 	result->file = file;
 	result->line = (int) lineno_int;
     } else {
-	char *message = line;
+	char *message;
+	char *maybenl;
+	message = line;
 	if(strncmp(message, "PASS:", strlen("PASS:")) == 0) {
 	    result->status = TEST_PASS;
 	    message += strlen("PASS:");
@@ -303,7 +315,7 @@ static int test_parse_line(char *line, struct test_result *result) {
 	} else {
 	    return test_set_error(0, "Failure to parse child message", result);
 	}
-	char *maybenl = strchr(message, '\n');
+	maybenl = strchr(message, '\n');
 	if(maybenl != NULL) {
 	    *maybenl = '\0';
 	}
@@ -321,7 +333,9 @@ static int run_test_fork(void (*fixture)(void (*)()), char *test_name, void (*te
     FILE *reader = NULL;
     int r;
     int ret = 0;
-    struct test_result *result = test_result_create(test_name, TEST_PASS, NULL, NULL, 0);
+    struct test_result *result;
+
+    result = test_result_create(test_name, TEST_PASS, NULL, NULL, 0);
     if(result == NULL) {
 	return -1;
     }
@@ -358,126 +372,130 @@ static int run_test_fork(void (*fixture)(void (*)()), char *test_name, void (*te
     }
 
     /* parent */
-    char line[256];
+    {
+	char line[256];
+	struct timeval tv;
+	fd_set read_fds;
+	fd_set error_fds;
+	int status;
 
-    r = close(pipefd[1]); /* close write */
-    if(r != 0) {
-	ret = test_set_error(errno, "Could not close pipefd[1]", result);
-	goto abort;
-    }
-    pipefd[1] = 0;
+	r = close(pipefd[1]); /* close write */
+	if(r != 0) {
+	    ret = test_set_error(errno, "Could not close pipefd[1]", result);
+	    goto abort;
+	}
+	pipefd[1] = 0;
 
-    reader = fdopen(pipefd[0], "r");
-    if(reader == NULL) {
-	ret = test_set_error(errno, "Could not fdopen reader", result);
-	goto abort;
-    }
+	reader = fdopen(pipefd[0], "r");
+	if(reader == NULL) {
+	    ret = test_set_error(errno, "Could not fdopen reader", result);
+	    goto abort;
+	}
 
-    struct timeval tv;
-    fd_set read_fds;
-    fd_set error_fds;
-
-    for(;;) {
-	tv.tv_sec = 10;
-	tv.tv_usec = 0;
-	FD_ZERO(&read_fds);
-	FD_ZERO(&error_fds);
-	FD_SET(pipefd[0], &read_fds);
-	FD_SET(pipefd[0], &error_fds);
-	r = select(pipefd[0] + 1, &read_fds, NULL, &error_fds, &tv);
-	if(r < 0) {
-	    if(errno == EINTR || errno == EAGAIN) {
-		continue;
-	    } else {
-		ret = test_set_error(errno, "select failed", result);
+	for(;;) {
+	    tv.tv_sec = 10;
+	    tv.tv_usec = 0;
+	    FD_ZERO(&read_fds);
+	    FD_ZERO(&error_fds);
+	    FD_SET(pipefd[0], &read_fds);
+	    FD_SET(pipefd[0], &error_fds);
+	    r = select(pipefd[0] + 1, &read_fds, NULL, &error_fds, &tv);
+	    if(r < 0) {
+		if(errno == EINTR || errno == EAGAIN) {
+		    continue;
+		} else {
+		    ret = test_set_error(errno, "select failed", result);
+		    goto abort;
+		}
+	    }
+	    if(r == 0) {
+		kill(pid, SIGTERM);
+		ret = test_set_error(0, "Timeout", result);
+		goto abort;
+	    }
+	    if(fgets(line, 256, reader) == NULL) {
+		break;
+	    }
+	    if(result->explanation != NULL) {
+		/* We already have a result... */
+		ret = test_set_error(0, "Received double result from child process", result);
+		goto abort;
+	    }
+	    ret = test_parse_line(line, result);
+	    if((ret != 0)
+	       || (result->status != TEST_PASS)) {
 		goto abort;
 	    }
 	}
-	if(r == 0) {
-	    kill(pid, SIGTERM);
-	    ret = test_set_error(0, "Timeout", result);
+	if(ferror(reader)) {
+	    ret = test_set_error(errno, "Error when reading", result);
 	    goto abort;
 	}
-	if(fgets(line, 256, reader) == NULL) {
-	    break;
-	}
-	if(result->explanation != NULL) {
-	    /* We already have a result... */
-	    ret = test_set_error(0, "Received double result from child process", result);
+	r = fclose(reader);
+	if(r != 0) {
+	    ret = test_set_error(errno, "Could not close reader", result);
 	    goto abort;
 	}
-	ret = test_parse_line(line, result);
-	if((ret != 0)
-	   || (result->status != TEST_PASS)) {
+	reader = NULL;
+	pipefd[0] = 0;
+	pid = waitpid(pid, &status, 0);
+	if(pid == -1) {
+	    ret = test_set_error(errno, "Error cleaning up child process", result);
 	    goto abort;
 	}
-    }
-    if(ferror(reader)) {
-	ret = test_set_error(errno, "Error when reading", result);
-	goto abort;
-    }
-    r = fclose(reader);
-    if(r != 0) {
-	ret = test_set_error(errno, "Could not close reader", result);
-	goto abort;
-    }
-    reader = NULL;
-    pipefd[0] = 0;
-    int status;
-    pid = waitpid(pid, &status, 0);
-    if(pid == -1) {
-	ret = test_set_error(errno, "Error cleaning up child process", result);
-	goto abort;
-    }
-    pid = 0;
-    if(WIFEXITED(status)) {
-	if((status = WEXITSTATUS(status)) != EXIT_SUCCESS) {
-	    char *uerror = alloca(strlen("Child process terminated with failure exit status: ") + 16);
-	    sprintf(uerror, "Child process terminated with failure exit status: %d", status);
+	pid = 0;
+	if(WIFEXITED(status)) {
+	    if((status = WEXITSTATUS(status)) != EXIT_SUCCESS) {
+		char *uerror;
+		uerror = alloca(strlen("Child process terminated with failure exit status: ") + 16);
+		sprintf(uerror, "Child process terminated with failure exit status: %d", status);
+		ret = test_set_error(0, uerror, result);
+		goto abort;
+	    }
+	} else if(WIFSIGNALED(status)) {
+	    char *ss;
+	    char *uerror;
+	    ss = strsignal(WTERMSIG(status));
+	    uerror = alloca(strlen("Child process terminated on signal: ") + strlen(ss) + 1);
+	    sprintf(uerror, "Child process terminated on signal: %s", ss);
 	    ret = test_set_error(0, uerror, result);
 	    goto abort;
+	} else {
+	    /* unknown state */
+	    ret = test_set_error(0, "Child process terminated in unknown state", result);
+	    goto abort;
 	}
-    } else if(WIFSIGNALED(status)) {
-	char *ss = strsignal(WTERMSIG(status));
-	char *uerror = alloca(strlen("Child process terminated on signal: ") + strlen(ss) + 1);
-	sprintf(uerror, "Child process terminated on signal: %s", ss);
-	ret = test_set_error(0, uerror, result);
-	goto abort;
-    } else {
-	/* unknown state */
-	ret = test_set_error(0, "Child process terminated in unknown state", result);
-	goto abort;
-    }
-    if(result->explanation == NULL) {
-	ret = test_set_error(0, "Child process exited early", result);
-	goto abort;
-    }
+	if(result->explanation == NULL) {
+	    ret = test_set_error(0, "Child process exited early", result);
+	    goto abort;
+	}
 
-abort:
-    /* clean up, ignoring errors */
-    if(reader != NULL) {
-	fclose(reader);
-    } else if(pipefd[0] != 0) {
-	close(pipefd[0]);
-    }
-    if(pipefd[1] != 0) {
-	close(pipefd[1]);
-    }
-    if(pid > 0) {
-	pid = waitpid(pid, &status, 0);
-    }
-    if(ret == 0) {
-	if(strlen(result->explanation) == 0) {
-	    free(result->explanation);
-	    result->explanation = NULL;
+    abort:
+	/* clean up, ignoring errors */
+	if(reader != NULL) {
+	    fclose(reader);
+	} else if(pipefd[0] != 0) {
+	    close(pipefd[0]);
 	}
-	r = test_results_push(result);
-	if(r != 0) {
-	    test_result_free(result);
-	    return r;
+	if(pipefd[1] != 0) {
+	    close(pipefd[1]);
 	}
+	if(pid > 0) {
+	    pid = waitpid(pid, &status, 0);
+	}
+	if(ret == 0) {
+	    if(strlen(result->explanation) == 0) {
+		free(result->explanation);
+		result->explanation = NULL;
+	    }
+	    r = test_results_push(result);
+	    if(r != 0) {
+		test_result_free(result);
+		return r;
+	    }
+	}
+	return ret;
     }
-    return ret;
 }
 
 int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)()) {
@@ -489,11 +507,13 @@ int run_test_suite(void (*fixture)(void (*)()), char **test_name, void (**test)(
 	    r = run_test(fixture, *test_name, *test);
 	}
 	if(r != 0) {
-	    char *explanation = strdup("Test framework failed to record result");
+	    char *explanation;
+	    struct test_result *result;
+	    explanation = strdup("Test framework failed to record result");
 	    if(explanation == NULL) {
 		return -1;
 	    }
-	    struct test_result *result = test_result_create(*test_name, TEST_UNRESOLVED, explanation, NULL, 0);
+	    result = test_result_create(*test_name, TEST_UNRESOLVED, explanation, NULL, 0);
 	    if(result == NULL) {
 		free(explanation);
 		return -1;
@@ -512,11 +532,13 @@ int print_test_results() {
     size_t nresults = 0, passed = 0, failed = 0, unresolved = 0, untested = 0, unsupported = 0;
     int r;
     if(test_results != NULL) {
+	size_t i;
 	/* count results */
 	nresults = test_results->nresults;
-	size_t i;
 	for(i = 0; i < nresults; i++) {
 	    char *status;
+	    char *file;
+	    int line;
 	    switch(test_results->results[i]->status) {
 	    case TEST_PASS:
 		passed++;
@@ -538,8 +560,8 @@ int print_test_results() {
 		status = "UNRESOLVED";
 		unresolved++;
 	    }
-	    char *file = test_results->results[i]->file;
-	    int line = test_results->results[i]->line;
+	    file = test_results->results[i]->file;
+	    line = test_results->results[i]->line;
 	    if(file == NULL) {
 		file = "<unknown>";
 	    }
@@ -565,10 +587,10 @@ int print_test_results() {
 }
 
 bool tests_succeeded() {
+   size_t i;
    if(test_results == NULL) {
        return true;
    }
-   size_t i;
    for(i = 0; i < test_results->nresults; i++) {
        switch(test_results->results[i]->status) {
        case TEST_PASS:
