@@ -58,18 +58,22 @@ shared: libatomickit.so
 static: libatomickit.a
 
 install-headers:
-	install -m 644 -D -t ${INCLUDEDIR}/atomickit ${HEADERS}
-	install -m 644 -D -t ${INCLUDEDIR}/atomickit/arch ${ARCHHEADERS}
+	mkdir -p ${INCLUDEDIR}/atomickit/arch
+	install -m 644 -t ${INCLUDEDIR}/atomickit ${HEADERS}
+	install -m 644 -t ${INCLUDEDIR}/atomickit/arch ${ARCHHEADERS}
 
 install-pkgconfig: atomickit.pc
-	install -m 644 -D atomickit.pc ${PKGCONFIGDIR}/atomickit.pc
+	mkdir -p ${PKGCONFIGDIR}
+	install -m 644 atomickit.pc ${PKGCONFIGDIR}/atomickit.pc
 
 install-shared: shared
-	install -m 755 -D libatomickit.so ${LIBDIR}/libatomickit.so.${VERSION}
+	mkdir -p ${LIBDIR}
+	install -m 755 libatomickit.so ${LIBDIR}/libatomickit.so.${VERSION}
 	ln -fs ${LIBDIR}/libatomickit.so.${VERSION} ${LIBDIR}/libatomickit.so
 
 install-static: static
-	install -m 644 -D libatomickit.a ${LIBDIR}/libatomickit.a
+	mkdir -p ${LIBDIR}
+	install -m 644 libatomickit.a ${LIBDIR}/libatomickit.a
 
 install-all-static: static atomickit.pc install-static install-headers install-pkgconfig
 
