@@ -1,4 +1,4 @@
-.PHONY: shared static all install-headers install-pkgconfig install-shared install-static install-all-static install-all-shared install install-strip uninstall clean
+.PHONY: shared static all install-headers install-pkgconfig install-shared install-static install-all-static install-all-shared install install-strip uninstall clean check-shared check-static check
 
 .SUFFIXES: .o .pic.o
 
