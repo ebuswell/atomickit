@@ -127,47 +127,47 @@ static inline double atomic_double_exchange(volatile atomic_double *object, doub
     return atomic_double_exchange_explicit(object, desired, memory_order_seq_cst);
 }
 
-static inline bool atomic_float_compare_exchange_strong_explicit(volatile atomic_float *object, float *expected, float desired, memory_order success, memory_order failure) {
+static inline _Bool atomic_float_compare_exchange_strong_explicit(volatile atomic_float *object, float *expected, float desired, memory_order success, memory_order failure) {
     union float_least32_pun pun;
     pun.f = __AK_canonical_float(desired);
     *expected = __AK_canonical_float(*expected);
     return atomic_compare_exchange_strong_explicit(object, (uint_least32_t *) expected, pun.u, success, failure);
 }
 
-static inline bool atomic_double_compare_exchange_strong_explicit(volatile atomic_double *object, double *expected, double desired, memory_order success, memory_order failure) {
+static inline _Bool atomic_double_compare_exchange_strong_explicit(volatile atomic_double *object, double *expected, double desired, memory_order success, memory_order failure) {
     union double_least64_pun pun;
     pun.d = __AK_canonical_double(desired);
     *expected = __AK_canonical_double(*expected);
     return atomic_compare_exchange_strong_explicit(object, (uint_least64_t *) expected, pun.u, success, failure);
 }
 
-static inline bool atomic_float_compare_exchange_strong(volatile atomic_float *object, float *expected, float desired) {
+static inline _Bool atomic_float_compare_exchange_strong(volatile atomic_float *object, float *expected, float desired) {
     return atomic_float_compare_exchange_strong_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 
-static inline bool atomic_double_compare_exchange_strong(volatile atomic_double *object, double *expected, double desired) {
+static inline _Bool atomic_double_compare_exchange_strong(volatile atomic_double *object, double *expected, double desired) {
     return atomic_double_compare_exchange_strong_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 
-static bool atomic_float_compare_exchange_weak_explicit(volatile atomic_float *object, float *expected, float desired, memory_order success, memory_order failure) {
+static _Bool atomic_float_compare_exchange_weak_explicit(volatile atomic_float *object, float *expected, float desired, memory_order success, memory_order failure) {
     union float_least32_pun pun;
     pun.f = __AK_canonical_float(desired);
     *expected = __AK_canonical_float(*expected);
     return atomic_compare_exchange_weak_explicit(object, (uint_least32_t *) expected, pun.u, success, failure);
 }
 
-static bool atomic_double_compare_exchange_weak_explicit(volatile atomic_double *object, double *expected, double desired, memory_order success, memory_order failure) {
+static _Bool atomic_double_compare_exchange_weak_explicit(volatile atomic_double *object, double *expected, double desired, memory_order success, memory_order failure) {
     union double_least64_pun pun;
     pun.d = __AK_canonical_double(desired);
     *expected = __AK_canonical_double(*expected);
     return atomic_compare_exchange_weak_explicit(object, (uint_least64_t *) expected, pun.u, success, failure);
 }
 
-static inline bool atomic_float_compare_exchange_weak(volatile atomic_float *object, float *expected, float desired) {
+static inline _Bool atomic_float_compare_exchange_weak(volatile atomic_float *object, float *expected, float desired) {
     return atomic_float_compare_exchange_weak_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 
-static inline bool atomic_double_compare_exchange_weak(volatile atomic_double *object, double *expected, double desired) {
+static inline _Bool atomic_double_compare_exchange_weak(volatile atomic_double *object, double *expected, double desired) {
     return atomic_double_compare_exchange_weak_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 

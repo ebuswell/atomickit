@@ -186,7 +186,7 @@ struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
 	switch(__ARCP_PTR2COUNT(ptr)) {
 	case __ARCP_COUNTMASK - 1:
 	    /* Spinlock if too many threads are accessing this at once. */
-	    cpu_relax();
+	    cpu_yield();
 	    ptr = atomic_ptr_load_explicit(&weakref->ptr, memory_order_consume);
 	    goto retry;
 	case __ARCP_COUNTMASK:
@@ -243,7 +243,7 @@ struct arcp_region *arcp_load(arcp_t *rcp) {
     do {
 	while(unlikely(__ARCP_PTR2COUNT(ptr) == __ARCP_COUNTMASK)) {
 	    /* Spinlock if too many threads are accessing this at once. */
-	    cpu_relax();
+	    cpu_yield();
 	    ptr = atomic_ptr_load_explicit(&rcp->ptr, memory_order_consume);
 	}
     } while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&rcp->ptr, &ptr, ptr + 1,

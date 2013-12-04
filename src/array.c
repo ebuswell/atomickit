@@ -57,20 +57,19 @@ struct aary *aary_create(size_t length) {
     return ret;
 }
 
-#define IF_BSEARCH(list, lower, nitems, value, retidx)	do {	\
-    size_t __l;							\
-    size_t __u;							\
-    (retidx) = (lower);						\
-    __l = (retidx);						\
-    __u = (nitems);						\
-    while(__l < __u) {						\
-	struct arcp_region *__v;				\
-	(retidx) = (__l + __u) / 2;				\
-	__v = (list)[retidx];					\
-	if((value) < __v) {					\
-	    __u = (retidx);					\
-	} else if((value) > __v) {				\
-	    __l = ++(retidx);					\
+#define IF_BSEARCH(list, nitems, value, retidx)	do {	\
+    size_t __l;						\
+    size_t __u;						\
+    (retidx) = __l = (0);				\
+    __u = (nitems);					\
+    while(__l < __u) {					\
+	struct arcp_region *__v;			\
+	(retidx) = (__l + __u) / 2;			\
+	__v = (list)[retidx];				\
+	if((value) < __v) {				\
+	    __u = (retidx);				\
+	} else if((value) > __v) {			\
+	    __l = ++(retidx);				\
 	} else
 
 #define ENDIF_BSEARCH	\
@@ -355,7 +354,7 @@ struct aary *aary_set_add(struct aary *array, struct arcp_region *region) {
     size_t i;
     size_t length;
     length = array->length;
-    IF_BSEARCH(array->items, 0, length, region, i) {
+    IF_BSEARCH(array->items, length, region, i) {
 	/* Already present; do nothing */
 	return array;
     } ENDIF_BSEARCH;
@@ -367,7 +366,7 @@ struct aary *aary_dup_set_add(struct aary *array, struct arcp_region *region) {
     size_t i;
     size_t length;
     length = array->length;
-    IF_BSEARCH(array->items, 0, length, region, i) {
+    IF_BSEARCH(array->items, length, region, i) {
 	/* Already present; do nothing */
 	return aary_dup(array);
     } ENDIF_BSEARCH;
@@ -379,7 +378,7 @@ struct aary *aary_set_remove(struct aary *array, struct arcp_region *region) {
     size_t i;
     size_t length;
     length = array->length;
-    IF_BSEARCH(array->items, 0, length, region, i) {
+    IF_BSEARCH(array->items, length, region, i) {
 	/* Found it */
 	return aary_remove(array, i);
     } ENDIF_BSEARCH;
@@ -392,7 +391,7 @@ struct aary *aary_dup_set_remove(struct aary *array, struct arcp_region *region)
     size_t i;
     size_t length;
     length = array->length;
-    IF_BSEARCH(array->items, 0, length, region, i) {
+    IF_BSEARCH(array->items, length, region, i) {
 	/* Found it */
 	return aary_dup_remove(array, i);
     } ENDIF_BSEARCH;
@@ -402,7 +401,7 @@ struct aary *aary_dup_set_remove(struct aary *array, struct arcp_region *region)
 
 bool aary_set_contains(struct aary *array, struct arcp_region *region) {
     size_t i;
-    IF_BSEARCH(array->items, 0, array->length, region, i) {
+    IF_BSEARCH(array->items, array->length, region, i) {
 	return true;
     } ENDIF_BSEARCH;
     return false;

@@ -64,19 +64,19 @@ static inline void *atomic_ptr_exchange(volatile atomic_ptr *object, void *desir
     return atomic_ptr_exchange_explicit(object, desired, memory_order_seq_cst);
 }
 
-static inline bool atomic_ptr_compare_exchange_strong_explicit(volatile atomic_ptr *object, void **expected, void *desired, memory_order success, memory_order failure) {
+static inline _Bool atomic_ptr_compare_exchange_strong_explicit(volatile atomic_ptr *object, void **expected, void *desired, memory_order success, memory_order failure) {
     return atomic_compare_exchange_strong_explicit(&object->uintptr, (uintptr_t *) expected, (uintptr_t) desired, success, failure);
 }
 
-static inline bool atomic_ptr_compare_exchange_strong(volatile atomic_ptr *object, void **expected, void *desired) {
+static inline _Bool atomic_ptr_compare_exchange_strong(volatile atomic_ptr *object, void **expected, void *desired) {
     return atomic_ptr_compare_exchange_strong_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 
-static bool atomic_ptr_compare_exchange_weak_explicit(volatile atomic_ptr *object, void **expected, void *desired, memory_order success, memory_order failure) {
+static _Bool atomic_ptr_compare_exchange_weak_explicit(volatile atomic_ptr *object, void **expected, void *desired, memory_order success, memory_order failure) {
     return atomic_compare_exchange_weak_explicit(&object->uintptr, (uintptr_t *) expected, (uintptr_t) desired, success, failure);
 }
 
-static inline bool atomic_ptr_compare_exchange_weak(volatile atomic_ptr *object, void **expected, void *desired) {
+static inline _Bool atomic_ptr_compare_exchange_weak(volatile atomic_ptr *object, void **expected, void *desired) {
     return atomic_ptr_compare_exchange_weak_explicit(object, expected, desired, memory_order_seq_cst, memory_order_seq_cst);
 }
 

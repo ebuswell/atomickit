@@ -18,22 +18,7 @@
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <string.h>
-#include "config.h"
-
-#ifdef HAVE_ALLOCA_H
-# include <alloca.h>
-#elif defined __GNUC__
-# define alloca __builtin_alloca
-#elif defined _AIX
-# define alloca __alloca
-#elif defined _MSC_VER
-# include <malloc.h>
-# define alloca _alloca
-#else
-# include <stddef.h>
-void *alloca(size_t);
-#endif
-
+#include <alloca.h>
 #include <atomickit/atomic-rcp.h>
 #include "alltests.h"
 #include "test.h"

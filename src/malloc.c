@@ -362,7 +362,7 @@ static inline void *fstack_pop(int bin) {
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
-		cpu_relax();
+		cpu_yield();
 		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
 	    }
 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,
@@ -453,7 +453,7 @@ static void fstack_push(int bin, void *ptr) {
 	do {
 	    while(PTR_COUNT(next) == MIN_SIZE - 1) {
 		/* Spinlock if too many threads are accessing this at once. */
-		cpu_relax();
+		cpu_yield();
 		next = atomic_ptr_load_explicit(&glbl_fstack[bin], memory_order_acquire);
 	    }
 	} while(unlikely(!atomic_ptr_compare_exchange_weak_explicit(&glbl_fstack[bin], &next, next + 1,

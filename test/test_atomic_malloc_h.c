@@ -17,8 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include "config.h"
-
 #include <atomickit/atomic-malloc.h>
 #include "alltests.h"
 #include "test.h"

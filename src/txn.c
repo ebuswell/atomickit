@@ -318,7 +318,7 @@ enum atxn_status atxn_store(struct atxn_handle *handle, atxn_t *txn, struct arcp
 
 enum atxn_status atxn_commit(struct atxn_handle *handle) {
     int r;
-    enum atxn_status ret;
+    enum atxn_status ret = ret;
 
     if(handle->nupdates == 0) {
 	arcp_release(handle);

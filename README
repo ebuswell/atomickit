@@ -1,11 +1,11 @@
-Atomic Kit is a minimalist library of lock-free atomic functions based
-on C11 atomics.  It is built to be as fast as possible, with as simple
-and minimal a code base as possible.
+Atomic Kit is a minimalist library of lock-free atomic functions based on C11
+atomics. It is built to be as fast as possible, with as simple and minimal a
+code base as possible.
 
-See the file 'INSTALL' for generic instructions on how to compile and
-install this software.
+To build and install, symlink the file "config.def.mk" to "config.mk", or make
+a copy to preserve local changes. Then run "make" and "make install".
 
-----------------------------------------------------------------------
+------------------------------------------------------------------------------
 
 Atomic Kit is Copyright 2013 Evan Buswell
 

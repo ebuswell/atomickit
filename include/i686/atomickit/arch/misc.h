@@ -1,7 +1,7 @@
-/** @file yield.h
- * yield.h
+/** @file misc.h
+ * misc.h
  *
- * Gives us cpu_relax()
+ * Gives us cpu_yield()
  */
 /*
  * Copyright 2013 Evan Buswell
@@ -22,15 +22,15 @@
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifndef ATOMICKIT_ATOMIC_H
-# error atomickit/arch/yield.h should not be included directly; include atomickit/atomic.h instead
+# error atomickit/arch/misc.h should not be included directly; include atomickit/atomic.h instead
 #endif
 
-#ifndef ATOMICKIT_ARCH_YIELD_H
-#define ATOMICKIT_ARCH_YIELD_H 1
+#ifndef ATOMICKIT_ARCH_MISC_H
+#define ATOMICKIT_ARCH_MISC_H 1
 
 /* REP NOP (PAUSE) Is a good thing to insert into busy-wait loops. */
-static inline void cpu_relax(void) {
-    __asm__ volatile("rep; nop" ::: "memory");
+static inline void cpu_yield(void) {
+	__asm__ volatile("rep; nop" ::: "memory");
 }
 
-#endif /* ! ATOMICKIT_ARCH_YIELD_H */
+#endif /* ! ATOMICKIT_ARCH_MISC_H */

@@ -114,8 +114,6 @@ static void test_atomic_is_lock_free() {
     b = atomic_is_lock_free(&aintmax);
     CHECKPOINT();
     b = atomic_is_lock_free(&auintmax);
-    CHECKPOINT();
-    b = atomic_is_lock_free(&aflag);
 }
 
 /*****************************************************/
