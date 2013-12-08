@@ -1,4 +1,4 @@
-.PHONY: shared static all install-headers install-pkgconfig install-shared install-static install-all-static install-all-shared install install-strip uninstall clean check-shared check-static check
+.PHONY: shared static all install-headers install-pkgconfig install-shared install-static install-static-strip install-shared-strip install-all-static install-all-shared install-all-static-strip install-all-shared-strip install install-strip uninstall clean check-shared check-static check
 
 .SUFFIXES: .o .pic.o
 
@@ -58,38 +58,47 @@ shared: libatomickit.so
 static: libatomickit.a
 
 install-headers:
-	mkdir -p ${INCLUDEDIR}/atomickit/arch
-	install -m 644 -t ${INCLUDEDIR}/atomickit ${HEADERS}
-	install -m 644 -t ${INCLUDEDIR}/atomickit/arch ${ARCHHEADERS}
+	(umask 022; mkdir -p ${DESTDIR}${INCLUDEDIR}/atomickit/arch)
+	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit ${HEADERS}
+	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit/arch ${ARCHHEADERS}
 
 install-pkgconfig: atomickit.pc
-	mkdir -p ${PKGCONFIGDIR}
-	install -m 644 atomickit.pc ${PKGCONFIGDIR}/atomickit.pc
+	(umask 022; mkdir -p ${DESTDIR}${PKGCONFIGDIR})
+	install -m 644 atomickit.pc ${DESTDIR}${PKGCONFIGDIR}/atomickit.pc
 
 install-shared: shared
-	mkdir -p ${LIBDIR}
-	install -m 755 libatomickit.so ${LIBDIR}/libatomickit.so.${VERSION}
-	ln -fs ${LIBDIR}/libatomickit.so.${VERSION} ${LIBDIR}/libatomickit.so
+	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
+	install -m 755 libatomickit.so ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} ${DESTDIR}${LIBDIR}/libatomickit.so
 
 install-static: static
-	mkdir -p ${LIBDIR}
-	install -m 644 libatomickit.a ${LIBDIR}/libatomickit.a
+	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
+	install -m 644 libatomickit.a ${DESTDIR}${LIBDIR}/libatomickit.a
+
+install-shared-strip: install-shared
+	strip --strip-unneeded ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+
+install-static-strip: install-static
+	strip --strip-unneeded ${DESTDIR}${LIBDIR}/libatomickit.a
 
 install-all-static: static atomickit.pc install-static install-headers install-pkgconfig
 
 install-all-shared: shared atomickit.pc install-shared install-headers install-pkgconfig
 
+install-all-shared-strip: install-all-shared install-shared-strip
+
+install-all-static-strip: install-all-static install-static-strip
+
 install: install-all-shared
 
-install-strip: install
-	strip --strip-unneeded ${LIBDIR}/libatomickit.so.${VERSION}
+install-strip: install-all-shared-strip
 
 uninstall: 
-	rm -f ${LIBDIR}/libatomickit.so.${VERSION}
-	rm -f ${LIBDIR}/libatomickit.so
-	rm -f ${LIBDIR}/libatomickit.a
-	rm -f ${PKGCONFIGDIR}/atomickit.pc
-	rm -rf ${INCLUDEDIR}/atomickit
+	rm -f ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+	rm -f ${DESTDIR}${LIBDIR}/libatomickit.so
+	rm -f ${DESTDIR}${LIBDIR}/libatomickit.a
+	rm -f ${DESTDIR}${PKGCONFIGDIR}/atomickit.pc
+	rm -rf ${DESTDIR}${INCLUDEDIR}/atomickit
 
 clean:
 	rm -f atomickit.pc
