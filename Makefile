@@ -6,9 +6,10 @@ include config.mk
 
 VERSION=0.3
 
-OBJS=src/rcp.o src/queue.o src/malloc.o src/txn.o src/array.o src/string.o
+OBJS=src/rcp.o src/queue.o src/malloc.o src/txn.o src/array.o src/string.o \
+     src/dict.o
 PICOBJS=src/rcp.pic.o src/queue.pic.o src/malloc.pic.o src/txn.pic.o \
-        src/array.pic.o src/string.pic.o
+        src/array.pic.o src/string.pic.o src/dict.pic.o
 TESTOBJS=test/main.o test/test_atomic_array_h.o test/test_atomic_float_h.o \
          test/test_atomic_h.o test/test_atomic_malloc_h.o \
          test/test_atomic_pointer_h.o test/test_atomic_queue_h.o \
