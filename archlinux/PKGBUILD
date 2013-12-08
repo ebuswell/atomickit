@@ -21,17 +21,18 @@ pkgver() {
 
 build() {
   cd "${srcdir}/${_pkgname}"
-  ./autogen.sh
-  ./configure --prefix=/usr
-  make
+  [ -e config.mk ] || ln -s config.def.mk config.mk
+  PREFIX=/usr make
 }
 
 check() {
   cd "${srcdir}/${_pkgname}"
-  make check
+  [ -e config.mk ] || ln -s config.def.mk config.mk
+  PREFIX=/usr make check
 }
 
 package() {
   cd "${srcdir}/${_pkgname}"
-  make DESTDIR=${pkgdir} install
+  [ -e config.mk ] || ln -s config.def.mk config.mk
+  PREFIX=/usr DESTDIR=${pkgdir} make install
 }
