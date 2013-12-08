@@ -3,7 +3,8 @@ INCLUDEDIR?=${PREFIX}/include
 LIBDIR?=${PREFIX}/lib
 DESTDIR?=
 PKGCONFIGDIR?=${LIBDIR}/pkgconfig
-ARCH?=$(shell uname -m)
+UNAME_ARCH!=uname -m
+ARCH?=${UNAME_ARCH}
 # ARCH?=x86_64
 # ARCH?=i686
 
