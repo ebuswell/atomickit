@@ -1,7 +1,7 @@
 # Maintainer: Evan Buswell <ebuswell@gmail.com>
 _pkgname=atomickit
 pkgname=${_pkgname}-git
-pkgver=0.3
+pkgver=0
 pkgrel=1
 pkgdesc="A minimalist library of lock-free atomic functions based on C11 atomics"
 arch=('i686' 'x86_64')

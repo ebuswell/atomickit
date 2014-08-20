@@ -1,59 +1,65 @@
 /** @file atomic.h
  *
- * This provides `likely`/`unlikely` and will include the C11 atomic
- * header or a compatibility header if the C11 header does not exist
- * for this implementation of C.  If the C11 `stdatomic.h` header
- * exists, you should define `HAVE_STDATOMIC_H` before including this
- * file.
- *
- * This file is a redaction of arch/x86/include/compiler.h and some
- * other files from the Linux Kernel.
+ * This provides `likely`/`unlikely` and all of the C11 atomic functions, from
+ * the C11 atomic header if it exists.
  */
 /*
  * Copyright 2013 Evan Buswell
  * Copyright 2012 Linus Torvalds et al.
- * Copyright 1991, 1993 The Regents of the University of California
+ *
+ * This file incorporates code from arch/x86/include/compiler.h plus some
+ * other files from the Linux Kernel.
  *
  * This file is part of Atomic Kit.
  * 
- * Atomic Kit is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published
- * by the Free Software Foundation, version 2.
+ * Atomic Kit is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation, version 2.
  * 
- * Atomic Kit is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Atomic Kit is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
  * 
- * You should have received a copy of the GNU General Public License
- * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
- * 
- * This code is derived from software contributed to Berkeley by
- * Berkeley Software Design, Inc.
+ * You should have received a copy of the GNU General Public License along
+ * with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
- * may be used to endorse or promote products derived from this software
- * without specific prior written permission.
+ * This file incorporates work from freebsd from sys/sys/stdatomic.h and
+ * sys/sys/cdefs.h covered by the following copyright and  
+ * permission notice:
+ * 
+ *   Copyright (c) 2011 Ed Schouten <ed@FreeBSD.org>
+ *                      David Chisnall <theraven@FreeBSD.org>
+ *   Copyright (c) 1991, 1993
+ *                      The Regents of the University of California.
+ *   All rights reserved.
+ *  
+ *   This code is derived from software contributed to Berkeley by
+ *   Berkeley Software Design, Inc.
+ * 
+ *   Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions are
+ *   met:
+ *   1. Redistributions of source code must retain the above copyright notice,
+ *      this list of conditions and the following disclaimer.
+ *   2. Redistributions in binary form must reproduce the above copyright
+ *      notice, this list of conditions and the following disclaimer in the
+ *      documentation and/or other materials provided with the distribution.
+ *   4. Neither the name of the University nor the names of its contributors
+ *      may be used to endorse or promote products derived from this software
+ *      without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ *   THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ *   ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ *   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ *   PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE
+ *   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ *   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ *   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ *   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ *   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ *   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ *   THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #ifndef ATOMICKIT_ATOMIC_H
@@ -387,6 +393,30 @@ typedef struct {
  */
 # define unlikely(x)	__builtin_expect(!!(x), 0)
 #endif
+
+/* Convenience abbreviations */
+#define mo_relaxed memory_order_relaxed
+#define mo_consume memory_order_consume
+#define mo_acquire memory_order_acquire
+#define mo_release memory_order_release
+#define mo_acq_rel memory_order_acq_rel
+#define mo_seq_cst memory_order_seq_cst
+
+#define ak_fence atomic_thread_fence
+#define ak_sigfence atomic_signal_fence
+#define ak_is_nb atomic_is_lock_free
+#define ak_init atomic_init
+#define ak_store atomic_store_explicit
+#define ak_load atomic_load_explicit
+#define ak_cas atomic_compare_exchange_weak_explicit
+#define ak_cas_strong atomic_compare_exchange_strong_explicit
+#define ak_swap atomic_exchange_explicit
+#define ak_ldadd atomic_fetch_add_explicit
+#define ak_ldsub atomic_fetch_sub_explicit
+#define ak_ldxor atomic_fetch_xor_explicit
+#define ak_ldadd atomic_fetch_add_explicit
+#define aflag_ts atomic_flag_test_and_set_explicit
+#define aflag_clear atomic_flag_clear_explicit
 
 #include <atomickit/arch/misc.h>
 

@@ -1,3 +1,8 @@
 Authors of Atomic Kit
 
 Evan Buswell <ebuswell@gmail.com> is the maintainer.
+
+This project incorporates work from freebsd by the following authors:
+
+Ed Schouten <ed@FreeBSD.org>
+David Chisnall <theraven@FreeBSD.org>

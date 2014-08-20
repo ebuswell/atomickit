@@ -17,7 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <atomickit/atomic-malloc.h>
+#include <atomickit/malloc.h>
 #include "alltests.h"
 #include "test.h"
 
@@ -129,7 +129,7 @@ static void test_atryrealloc() {
 }
 
 /*************************/
-int run_atomic_malloc_h_test_suite() {
+int run_malloc_h_test_suite() {
     int r;
     void (*void_tests[])() = { test_amalloc, NULL };
     char *void_test_names[] = { "amalloc", NULL };

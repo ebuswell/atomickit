@@ -14,17 +14,17 @@
  *
  * This file is part of Atomic Kit.
  * 
- * Atomic Kit is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published
- * by the Free Software Foundation, version 2.
+ * Atomic Kit is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation, version 2.
  * 
- * Atomic Kit is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Atomic Kit is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
  * 
- * You should have received a copy of the GNU General Public License
- * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along
+ * with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef ATOMICKIT_ATOMIC_H
@@ -55,9 +55,6 @@
  */
 extern void __AK_wrong_size(void)
 	__attribute__((__error__("Bad argument size")));
-
-extern void __AK_64not_implemented(void)
-	__attribute__((__error__("64 bit on 32 bit architecture not yet implemented")));
 
 /* void */
 #define atomic_thread_fence(/* memory_order */ order)			\
@@ -103,7 +100,16 @@ extern void __AK_64not_implemented(void)
 #define __X86_CASE_B	1
 #define __X86_CASE_W	2
 #define __X86_CASE_L	4
-#define __X86_CASE_Q	8
+#if UINT32_MAX == UINTPTR_MAX
+/* 32 bit */
+# define __X86_CASE_Q	-1
+# define __X86_CASE_DL	8
+# define __X86_CASE_DQ	-1
+#else
+# define __X86_CASE_Q	8
+# define __X86_CASE_DL	-1
+# define __X86_CASE_DQ	16
+#endif
 
 #define __atomic_store_lock(object, desired)				\
 ({									\
@@ -201,7 +207,7 @@ extern void __AK_64not_implemented(void)
 		break;							\
 	}								\
 	default:							\
-	__AK_wrong_size();						\
+		__AK_wrong_size();					\
 	}								\
 })
 
@@ -488,6 +494,78 @@ extern void __AK_64not_implemented(void)
 		                       "=r" (__ret)			\
 		                     : "r" (__new), "0" (*__old)	\
 		                     : "memory", "cc");			\
+		break;							\
+	}								\
+	case __X86_CASE_DL:						\
+	{								\
+		union {							\
+			__typeof__((object)->__val) *o;			\
+			uint64_t *i;					\
+		} __old2 = { .o = __old };				\
+		union {							\
+			__typeof__((object)->__val) o;			\
+ 		       	uint64_t i;					\
+		} __new2 = { .o = __new };				\
+#ifdef __PIC__								\
+		volatile uint64_t *__ptr =				\
+			(volatile uint64_t *) &(object)->__val;		\
+		__asm__ __volatile__("xchgl %2, %%ebx;"			\
+		                     lock "cmpxchg8b %1;"		\
+		                     "movl %2, %%ebx;"			\
+		                     "setz %2"				\
+		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "2" ((uint32_t) __new2.i),	\
+		                       "c" ((uint32_t) __new2.i >> 32)	\
+		                       "0" (*__old2.i)			\
+		                     : "memory", "cc");			\
+#else									\
+		volatile uint64_t *__ptr =				\
+			(volatile uint64_t *) &(object)->__val;		\
+		__asm__ __volatile__(lock "cmpxchg8b %1; setz %2"	\
+		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "b" ((uint32_t) __new2.i),	\
+		                       "c" ((uint32_t) __new2.i >> 32)	\
+		                       "0" (*__old2.i)			\
+		                     : "memory", "cc");			\
+#endif									\
+		break;							\
+	}								\
+	case __X86_CASE_DQ:						\
+	{								\
+		union {							\
+			__typeof__((object)->__val) *o;			\
+			__uint128_t *i;					\
+		} __old2 = { .o = __old };				\
+		union {							\
+			__typeof__((object)->__val) o;			\
+ 		       	__uint128_t i;					\
+		} __new2 = { .o = __new };				\
+#ifdef __PIC__								\
+		volatile uint64_t *__ptr =				\
+			(volatile __uint128_t *) &(object)->__val;	\
+		__asm__ __volatile__("xchgq %2, %%rbx;"			\
+		                     lock "cmpxchg16b %1;"		\
+		                     "movq %2, %%rbx;"			\
+		                     "setz %2"				\
+		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "2" ((uint64_t) __new2.i),	\
+		                       "c" ((uint64_t) __new2.i >> 64)	\
+		                       "0" (*__old2.i)			\
+		                     : "memory", "cc");			\
+#else									\
+		volatile __uint128_t *__ptr =				\
+			(volatile __uint128_t *) &(object)->__val;	\
+		__asm__ __volatile__(lock "cmpxchg16b %1; setz %2"	\
+		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "b" ((uint64_t) __new2.i),	\
+		                       "c" ((uint64_t) __new2.i >> 64)	\
+		                       "0" (*__old2.i)			\
+		                     : "memory", "cc");			\
+#endif									\
 		break;							\
 	}								\
 	default:							\
@@ -806,5 +884,80 @@ extern void __AK_64not_implemented(void)
 		__atomic_flag_clear((object), "lock;");			\
 	}								\
 })
+
+/*
+ * Atomic double compare and exchange.  Compare EXPECTED with OBJECT, if
+ * identical, store DESIRED in OBJECT.  Set EXPECTED to the initial value in
+ * OBJECT. Return true on success.
+ */
+#define __ak_dcas(object, expected, desired, lock)			\
+({									\
+	_Bool __ret;							\
+ 	__typeof__((object)->__val) *__old = (expected);		\
+	union {								\
+		__typeof__((object)->__val) dval;			\
+		struct {						\
+			uintptr_t lo;					\
+			uintptr_t hi;					\
+		} dsplit;						\
+	} __new = { .dval = (desired) };				\
+	switch(sizeof(uintptr_t)) {					\
+	case __X86_CASE_L:						\
+	{								\
+		volatile uint64_t *__ptr =				\
+			(volatile uint64_t *) &(object)->__val;		\
+		__asm__ __volatile__(lock "cmpxchg8b %1; setz %2"	\
+		                     : "=A" (*__old), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "b" (__new.lo), "c" (__new.hi),	\
+		                       "0" (*__old)			\
+		                     : "memory", "cc");			\
+		break;							\
+	}								\
+	case __X86_CASE_Q:						\
+	{								\
+		volatile __int128_t *__ptr =				\
+			(volatile __int128_t *) &(object)->__val;	\
+		__asm__ __volatile__(lock "cmpxchg16b %1; setz %2"	\
+		                     : "=A" (*__old), "+m" (*__ptr),	\
+		                       "=r" (__ret)			\
+		                     : "b" (__new.lo), "c" (__new.hi),	\
+		                       "0" (*__old)			\
+		                     : "memory", "cc");			\
+		break;							\
+	}								\
+	default:							\
+		__AK_wrong_size();					\
+	}								\
+	__ret;								\
+})
+
+/* _Bool */
+#define ak_dcas(/* volatile A * */ object,				\
+                /* C * */ expected, /* C */ desired,			\
+                /* memory_order */ success, /* memory_order */ failure) \
+({									\
+	_Bool __ret2;							\
+	switch((success)) {						\
+	case memory_order_relaxed:					\
+	case memory_order_consume:					\
+	case memory_order_acquire:					\
+	case memory_order_release:					\
+	case memory_order_acq_rel:					\
+		__ret2 = __ak_dcas((object), (expected), desired), "");	\
+		break;							\
+	case memory_order_seq_cst:					\
+	default:							\
+		__ret2 = __ak_dcas((object), (expected), desired), "lock"); \
+		break;							\
+	}								\
+	__ret2;								\
+})
+
+/* _Bool */
+#define ak_dcas_strong(/* volatile A * */ object, /* C * */ expected,	\
+                       /* C */ desired, /* memory_order */ success,	\
+                       /* memory_order */ failure)			\
+	ak_dcas((object), (expected), (desired), (success), (failure))
 
 #endif /* ! ATOMICKIT_ARCH_ATOMIC_H */

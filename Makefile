@@ -1,30 +1,52 @@
-.PHONY: shared static all install-headers install-pkgconfig install-shared install-static install-static-strip install-shared-strip install-all-static install-all-shared install-all-static-strip install-all-shared-strip install install-strip uninstall clean check-shared check-static check
+# Atomic Kit is Copyright 2013 Evan Buswell
+# 
+# Atomic Kit is free software: you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation, version 2.
+# 
+# Atomic Kit is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+# 
+# You should have received a copy of the GNU General Public License along with
+# Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+
+.PHONY: shared static all install-headers install-pkgconfig install-shared \
+        install-static install-static-strip install-shared-strip \
+        install-all-static install-all-shared install-all-static-strip \
+        install-all-shared-strip install install-strip uninstall clean \
+        check-shared check-static check
 
 .SUFFIXES: .o .pic.o
 
 include config.mk
 
-VERSION=0.3
+MAJOR=0
+MINOR=3
 
-OBJS=src/rcp.o src/queue.o src/malloc.o src/txn.o src/array.o src/string.o \
-     src/dict.o
-PICOBJS=src/rcp.pic.o src/queue.pic.o src/malloc.pic.o src/txn.pic.o \
-        src/array.pic.o src/string.pic.o src/dict.pic.o
-TESTOBJS=test/main.o test/test_atomic_array_h.o test/test_atomic_float_h.o \
-         test/test_atomic_h.o test/test_atomic_malloc_h.o \
-         test/test_atomic_pointer_h.o test/test_atomic_queue_h.o \
-         test/test_atomic_rcp_h.o test/test_atomic_txn_h.o test/test.o
+SRCS=src/rcp.c src/queue.c src/malloc.c src/array.c src/string.c src/dict.c
+
+TESTSRCS=test/main.c test/test_array_h.c test/test_float_h.c \
+         test/test_atomic_h.c test/test_malloc_h.c \
+         test/test_queue_h.c test/test_rcp_h.c test/test.c
+
 HEADERS=include/atomickit/atomic.h \
-        include/atomickit/atomic-float.h \
-        include/atomickit/atomic-pointer.h \
-        include/atomickit/atomic-rcp.h \
-        include/atomickit/atomic-queue.h \
-        include/atomickit/atomic-malloc.h \
-        include/atomickit/atomic-txn.h \
-        include/atomickit/atomic-array.h \
-        include/atomickit/atomic-string.h
+        include/atomickit/float.h \
+        include/atomickit/pointer.h \
+        include/atomickit/rcp.h \
+        include/atomickit/queue.h \
+        include/atomickit/malloc.h \
+        include/atomickit/txn.h \
+        include/atomickit/array.h \
+        include/atomickit/string.h
+
 ARCHHEADERS=include/${ARCH}/atomickit/arch/atomic.h \
             include/${ARCH}/atomickit/arch/misc.h
+
+OBJS=${SRCS:.c=.o}
+PICOBJS=${SRCS:.c=.pic.o}
+TESTOBJS=${TESTSRCS:.c=.o}
 
 all: shared atomickit.pc
 
@@ -35,7 +57,7 @@ all: shared atomickit.pc
 	${CC} ${CFLAGS} -fPIC -c $< -o $@
 
 libatomickit.so: ${PICOBJS}
-	${CC} ${CFLAGS} ${LDFLAGS} -fPIC -shared ${PICOBJS} -o libatomickit.so
+	${CC} ${CFLAGS} -fPIC ${LDFLAGS} -shared ${PICOBJS} -o libatomickit.so
 
 libatomickit.a: ${OBJS}
 	rm -f libatomickit.a
@@ -69,8 +91,9 @@ install-pkgconfig: atomickit.pc
 
 install-shared: shared
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
-	install -m 755 libatomickit.so ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
-	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} ${DESTDIR}${LIBDIR}/libatomickit.so
+	install -m 755 libatomickit.so ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR}
+	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR} ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
+	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR} ${DESTDIR}${LIBDIR}/libatomickit.so
 
 install-static: static
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})

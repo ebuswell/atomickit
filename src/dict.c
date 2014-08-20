@@ -5,24 +5,25 @@
  * 
  * This file is part of Atomic Kit.
  * 
- * Atomic Kit is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published
- * by the Free Software Foundation, version 2.
+ * Atomic Kit is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation, version 2.
  * 
- * Atomic Kit is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Atomic Kit is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
  * 
- * You should have received a copy of the GNU General Public License
- * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along
+ * with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <stddef.h>
+#include <string.h>
 #include <errno.h>
-#include <atomickit/atomic-rcp.h>
-#include <atomickit/atomic-string.h>
-#include <atomickit/atomic-malloc.h>
-#include <atomickit/atomic-dict.h>
+#include "atomickit/rcp.h"
+#include "atomickit/string.h"
+#include "atomickit/malloc.h"
+#include "atomickit/dict.h"
 
 static void adict_destroy(struct adict *dict) {
 	size_t i;
@@ -40,89 +41,62 @@ struct adict *adict_dup(struct adict *dict) {
 	if(ret == NULL) {
 		return NULL;
 	}
-	arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-	ret->len = dict->len;
 	for(i = 0; i < dict->len; i++) {
-		ret->items[i].key = (struct astr *) arcp_acquire(dict->items[i].key);
+		ret->items[i].key = arcp_acquire(dict->items[i].key);
 		ret->items[i].value = arcp_acquire(dict->items[i].value);
 	}
+	ret->len = dict->len;
+	arcp_region_init(ret, (arcp_destroy_f) adict_destroy);
 	return ret;
 }
 
 struct adict *adict_create() {
-	struct adict *ret;
-	ret = amalloc(ADICT_OVERHEAD);
+	struct adict *ret = amalloc(ADICT_OVERHEAD);
 	if(ret == NULL) {
 		return NULL;
 	}
-	arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
 	ret->len = 0;
+	arcp_region_init(ret, (arcp_destroy_f) adict_destroy);
 	return ret;
 }
 
-#define IF_BSEARCH(list, nitems, key, retidx) do { \
-	size_t __l;                                \
-	size_t __u;                                \
-	struct astr *__k;                          \
-	int __r;                                   \
-	(retidx) = __l = 0;                        \
-	__u = (nitems);                            \
-	while(__l < __u) {                         \
-		(retidx) = (__l + __u) / 2;        \
-		__k = (list)[retidx].key;          \
-		__r = astr_cmp((key), __k);        \
-		if(__r < 0) {                      \
-			__u = (retidx);            \
-		} else if(__r > 0) {               \
-			__l = ++(retidx);          \
+#define IF_BSEARCH(list, nitems, key, retidx) do {		\
+	size_t __l;						\
+	size_t __u;						\
+	(retidx) = __l = 0;					\
+	__u = (nitems);						\
+	while(__l < __u) {					\
+		int __r;					\
+		(retidx) = (__l + __u) / 2;			\
+		__r = astr_cmp((key), (list)[retidx].key);	\
+		if(__r < 0) {					\
+			__u = (retidx);				\
+		} else if(__r > 0) {				\
+			__l = ++(retidx);			\
 		} else
 
 #define ENDIF_BSEARCH \
 	}             \
 } while(0)
 
-#define IF_BSEARCHCSTR(list, nitems, key, retidx) do { \
-	size_t __l;                                    \
-	size_t __u;                                    \
-	struct astr *__k;                              \
-	int __r;                                       \
-	(retidx) = __l = 0;                            \
-	__u = (nitems);                                \
-	while(__l < __u) {                             \
-		(retidx) = (__l + __u) / 2;            \
-		__k = (list)[retidx].key;              \
-		__r = astr_cstrcmp(__k, (key));        \
-		if(__r > 0) {                          \
-			__u = (retidx);                \
-		} else if(__r < 0) {                   \
-			__l = ++(retidx);              \
+#define IF_BSEARCHCSTR(list, nitems, key, retidx) do {		\
+	size_t __l;						\
+	size_t __u;						\
+	(retidx) = __l = 0;					\
+	__u = (nitems);						\
+	while(__l < __u) {					\
+		int __r;					\
+		(retidx) = (__l + __u) / 2;			\
+		__r = astr_cstrcmp((list)[retidx].key, (key));	\
+		if(__r > 0) {					\
+			__u = (retidx);				\
+		} else if(__r < 0) {				\
+			__l = ++(retidx);			\
 		} else
 
 #define ENDIF_BSEARCHCSTR \
 	}                 \
 } while(0)
-
-int adict_set(struct adict *dict, struct astr *key, struct arcp_region *value) {
-	size_t i;
-	IF_BSEARCH(dict->items, dict->len, key, i) {
-		arcp_release(dict->items[i].value);
-		dict->items[i].value = arcp_acquire(value);
-		return 0;
-	} ENDIF_BSEARCH;
-	errno = EINVAL;
-	return -1;
-}
-
-int adict_cstrset(struct adict *dict, char *key, struct arcp_region *value) {
-	size_t i;
-	IF_BSEARCHCSTR(dict->items, dict->len, key, i) {
-		arcp_release(dict->items[i].value);
-		dict->items[i].value = arcp_acquire(value);
-		return 0;
-	} ENDIF_BSEARCHCSTR;
-	errno = EINVAL;
-	return -1;
-}
 
 struct arcp_region *adict_get(struct adict *dict, struct astr *key) {
 	size_t i;
@@ -158,139 +132,315 @@ bool adict_cstrhas(struct adict *dict, char *key) {
 	return false;
 }
 
-struct adict *adict_put(struct adict *dict, struct astr *key, struct arcp_region *value) {
-	size_t i, j;
-	struct adict *ret;
-	IF_BSEARCH(dict->items, dict->len, key, i) {
-		ret = amalloc(ADICT_SIZE(dict->len));
-		if(ret == NULL) {
+struct adict *adict_put(struct adict *dict, struct astr *key,
+                        struct arcp_region *value) {
+	size_t i;
+	size_t len;
+	len = dict->len;
+	IF_BSEARCH(dict->items, len, key, i) {
+		arcp_release(dict->items[i].value);
+		dict->items[i].value = arcp_acquire(value);
+		return dict;
+	} ENDIF_BSEARCH;
+	if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
+		memmove(&dict->items[i + 1], &dict->items[i],
+		        sizeof(struct adict_entry) * (len - i));
+	} else {
+		struct adict *new_dict = amalloc(ADICT_SIZE(len + 1));
+		if(new_dict == NULL) {
 			return NULL;
 		}
-		arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-		ret->len = dict->len;
-		for(j = 0; j < i; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
-		}
-		ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-		ret->items[j].value = arcp_acquire(value);
-		for(j++; j < dict->len; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
-		}
-		return ret;
-	} ENDIF_BSEARCH;
-	ret = amalloc(ADICT_SIZE(dict->len + 1));
-	if(ret == NULL) {
-		return NULL;
+		memcpy(new_dict, dict, ADICT_SIZE(i));
+		memcpy(&new_dict->items[i + 1], &dict->items[i],
+		       sizeof(struct adict_entry) * (len - i));
+		afree(dict, ADICT_SIZE(len));
+		dict = new_dict;
 	}
-	arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-	ret->len = dict->len + 1;
-	for(j = 0; j < i; j++) {
-		ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-		ret->items[j].value = arcp_acquire(dict->items[j].value);
-	}
-	ret->items[j].key = (struct astr *) arcp_acquire(key);
-	ret->items[j].value = arcp_acquire(value);
-	for(j++; j < ret->len; j++) {
-		ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j - 1].key);
-		ret->items[j].value = arcp_acquire(dict->items[j - 1].value);
-	}
-	return ret;
+	dict->len = len + 1;
+	dict->items[i].key = arcp_acquire(key);
+	dict->items[i].value = arcp_acquire(value);
+	return dict;
 }
 
-struct adict *adict_cstrput(struct adict *dict, char *key, struct arcp_region *value) {
+struct adict *adict_dup_put(struct adict *dict, struct astr *key,
+                            struct arcp_region *value) {
 	size_t i, j;
-	struct adict *ret;
-	IF_BSEARCHCSTR(dict->items, dict->len, key, i) {
-		ret = amalloc(ADICT_SIZE(dict->len));
-		if(ret == NULL) {
+	struct adict *new_dict;
+	size_t len;
+	len = dict->len;
+	IF_BSEARCH(dict->items, len, key, i) {
+		new_dict = amalloc(ADICT_SIZE(len));
+		if(new_dict == NULL) {
 			return NULL;
 		}
-		arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-		ret->len = dict->len;
 		for(j = 0; j < i; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
 		}
-		ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-		ret->items[j].value = arcp_acquire(value);
-		for(j++; j < dict->len; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
+		for(j++; j < len; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
 		}
-		return ret;
+		new_dict->len = len;
+		goto set;
+	} ENDIF_BSEARCH;
+	new_dict = amalloc(ADICT_SIZE(dict->len + 1));
+	if(new_dict == NULL) {
+		return NULL;
+	}
+	for(j = 0; j < i; j++) {
+		new_dict->items[j].key = arcp_acquire(dict->items[j].key);
+		new_dict->items[j].value = arcp_acquire(dict->items[j].value);
+	}
+	for(; j < len; j++) {
+		new_dict->items[j].key = arcp_acquire(dict->items[j].key);
+		new_dict->items[j].value = arcp_acquire(dict->items[j].value);
+	}
+	new_dict->len = len + 1;
+set:
+	new_dict->items[i].key = arcp_acquire(key);
+	new_dict->items[i].value = arcp_acquire(value);
+	arcp_region_init(new_dict, (arcp_destroy_f) adict_destroy);
+	return new_dict;
+}
+
+struct adict *adict_cstrput(struct adict *dict, char *key,
+                            struct arcp_region *value) {
+	size_t i;
+	size_t len;
+	len = dict->len;
+	IF_BSEARCHCSTR(dict->items, len, key, i) {
+		arcp_release(dict->items[i].value);
+		dict->items[i].value = arcp_acquire(value);
+		return dict;
 	} ENDIF_BSEARCHCSTR;
 	{
-		struct astr *astrkey;
-		ret = amalloc(ADICT_SIZE(dict->len + 1));
-		if(ret == NULL) {
-			return NULL;
-		}
-		astrkey = astr_cstrdup(key);
+		struct astr *astrkey = astr_cstrdup(key);
 		if(astrkey == NULL) {
-			afree(ret, ADICT_SIZE(dict->len + 1));
 			return NULL;
 		}
-		arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-		ret->len = dict->len + 1;
-		for(j = 0; j < i; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
+		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
+			memmove(&dict->items[i + 1], &dict->items[i],
+		        	sizeof(struct adict_entry) * (len - i));
+		} else {
+			struct adict *new_dict = amalloc(ADICT_SIZE(len + 1));
+			if(new_dict == NULL) {
+				arcp_release(astrkey);
+				return NULL;
+			}
+			memcpy(new_dict, dict, ADICT_SIZE(i));
+			memcpy(&new_dict->items[i + 1], &dict->items[i],
+		       	       sizeof(struct adict_entry) * (len - i));
+			afree(dict, ADICT_SIZE(len));
+			dict = new_dict;
 		}
-		ret->items[j].key = astrkey;
-		ret->items[j].value = arcp_acquire(value);
-		for(j++; j < ret->len; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j - 1].key);
-			ret->items[j].value = arcp_acquire(dict->items[j - 1].value);
-		}
-		return ret;
+		dict->len = len + 1;
+		dict->items[i].key = astrkey;
+		dict->items[i].value = arcp_acquire(value);
+		return dict;
 	}
+}
+
+struct adict *adict_dup_cstrput(struct adict *dict, char *key,
+                                struct arcp_region *value) {
+	size_t i, j;
+	struct adict *new_dict;
+	size_t len;
+	len = dict->len;
+	IF_BSEARCHCSTR(dict->items, len, key, i) {
+		new_dict = amalloc(ADICT_SIZE(len));
+		if(new_dict == NULL) {
+			return NULL;
+		}
+		for(j = 0; j < i; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
+		}
+		for(j++; j < len; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
+		}
+		new_dict->len = len;
+		new_dict->items[i].key = arcp_acquire(dict->items[i].key);
+		goto set;
+	} ENDIF_BSEARCHCSTR;
+	{
+		struct astr *astrkey = astr_cstrdup(key);
+		if(astrkey == NULL) {
+			return NULL;
+		}
+		new_dict = amalloc(ADICT_SIZE(dict->len + 1));
+		if(new_dict == NULL) {
+			arcp_release(astrkey);
+			return NULL;
+		}
+		for(j = 0; j < i; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
+		}
+		for(; j < len; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
+		}
+		new_dict->len = len + 1;
+		new_dict->items[i].key = astrkey;
+	}
+set:
+	new_dict->items[i].value = arcp_acquire(value);
+	arcp_region_init(new_dict, (arcp_destroy_f) adict_destroy);
+	return new_dict;
 }
 
 struct adict *adict_del(struct adict *dict, struct astr *key) {
+	size_t i;
+	size_t len;
+	struct adict_entry deleted;
+	struct adict_entry last;
+	len = dict->len;
+	IF_BSEARCH(dict->items, len, key, i) {
+		deleted.key = dict->items[i].key;
+		deleted.value = dict->items[i].value;
+		last.key = dict->items[len - 1].key;
+		last.value = dict->items[len - 1].value;
+		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
+			if(deleted.key != last.key) {
+				memmove(&dict->items[i],
+				        &dict->items[i + 1],
+			                sizeof(struct adict_entry)
+				        * ((len - 1) - (i + 1)));
+				dict->items[len - 2].key = last.key;
+				dict->items[len - 2].value = last.value;
+			}
+		} else {
+			struct adict *new_dict;
+			new_dict = amalloc(ADICT_SIZE(len - 1));
+			if(new_dict == NULL) {
+				return NULL;
+			}
+			memcpy(new_dict, dict, ADICT_SIZE(i));
+			memcpy(&new_dict->items[i], &dict->items[i + 1],
+			       sizeof(struct adict_entry) * (len - (i + 1)));
+			afree(dict, ADICT_SIZE(len));
+			dict = new_dict;
+		}
+		dict->len = len - 1;
+		arcp_release(deleted.key);
+		arcp_release(deleted.value);
+		return dict;
+	} ENDIF_BSEARCH;
+	errno = EINVAL;
+	return NULL;
+}
+
+struct adict *adict_dup_del(struct adict *dict, struct astr *key) {
 	size_t i, j;
-	struct adict *ret;
-	IF_BSEARCH(dict->items, dict->len, key, i) {
-		ret = amalloc(ADICT_SIZE(dict->len - 1));
-		if(ret == NULL) {
+	size_t len;
+	struct adict *new_dict;
+	len = dict->len;
+	IF_BSEARCH(dict->items, len, key, i) {
+		new_dict = amalloc(ADICT_SIZE(len - 1));
+		if(new_dict == NULL) {
 			return NULL;
 		}
-		arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-		ret->len = dict->len - 1;
 		for(j = 0; j < i; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
 		}
-		for(; j < dict->len; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j + 1].key);
-			ret->items[j].value = arcp_acquire(dict->items[j + 1].value);
+		for(; j + 1 < len; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j + 1].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j + 1].value);
 		}
-		return ret;
+		new_dict->len = len - 1;
+		arcp_region_init(
+			new_dict, (arcp_destroy_f) adict_destroy);
+		return new_dict;
 	} ENDIF_BSEARCH;
 	errno = EINVAL;
 	return NULL;
 }
 
 struct adict *adict_cstrdel(struct adict *dict, char *key) {
+	size_t i;
+	size_t len;
+	struct adict_entry deleted;
+	struct adict_entry last;
+	len = dict->len;
+	IF_BSEARCHCSTR(dict->items, len, key, i) {
+		deleted.key = dict->items[i].key;
+		deleted.value = dict->items[i].value;
+		last.key = dict->items[len - 1].key;
+		last.value = dict->items[len - 1].value;
+		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
+			if(deleted.key != last.key) {
+				memmove(&dict->items[i],
+				        &dict->items[i + 1],
+			                sizeof(struct adict_entry)
+				        * ((len - 1) - (i + 1)));
+				dict->items[len - 2].key = last.key;
+				dict->items[len - 2].value = last.value;
+			}
+		} else {
+			struct adict *new_dict;
+			new_dict = amalloc(ADICT_SIZE(len - 1));
+			if(new_dict == NULL) {
+				return NULL;
+			}
+			memcpy(new_dict, dict, ADICT_SIZE(i));
+			memcpy(&new_dict->items[i], &dict->items[i + 1],
+			       sizeof(struct adict_entry) * (len - (i + 1)));
+			afree(dict, ADICT_SIZE(len));
+			dict = new_dict;
+		}
+		dict->len = len - 1;
+		arcp_release(deleted.key);
+		arcp_release(deleted.value);
+		return dict;
+	} ENDIF_BSEARCHCSTR;
+	errno = EINVAL;
+	return NULL;
+}
+
+struct adict *adict_dup_cstrdel(struct adict *dict, char *key) {
 	size_t i, j;
-	struct adict *ret;
-	IF_BSEARCHCSTR(dict->items, dict->len, key, i) {
-		ret = amalloc(ADICT_SIZE(dict->len - 1));
-		if(ret == NULL) {
+	size_t len;
+	struct adict *new_dict;
+	len = dict->len;
+	IF_BSEARCHCSTR(dict->items, len, key, i) {
+		new_dict = amalloc(ADICT_SIZE(len - 1));
+		if(new_dict == NULL) {
 			return NULL;
 		}
-		arcp_region_init(ret, (void (*)(struct arcp_region *)) adict_destroy);
-		ret->len = dict->len - 1;
 		for(j = 0; j < i; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j].key);
-			ret->items[j].value = arcp_acquire(dict->items[j].value);
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j].value);
 		}
-		for(; j < dict->len; j++) {
-			ret->items[j].key = (struct astr *) arcp_acquire(dict->items[j + 1].key);
-			ret->items[j].value = arcp_acquire(dict->items[j + 1].value);
+		for(; j + 1 < len; j++) {
+			new_dict->items[j].key =
+				arcp_acquire(dict->items[j + 1].key);
+			new_dict->items[j].value =
+				arcp_acquire(dict->items[j + 1].value);
 		}
-		return ret;
+		new_dict->len = len - 1;
+		arcp_region_init(new_dict, (arcp_destroy_f) adict_destroy);
+		return new_dict;
 	} ENDIF_BSEARCHCSTR;
 	errno = EINVAL;
 	return NULL;

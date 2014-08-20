@@ -22,8 +22,8 @@
 #define _GNU_SOURCE
 #include <string.h>
 #undef _GNU_SOURCE
-#include "atomickit/atomic-malloc.h"
-#include "atomickit/atomic-string.h"
+#include "atomickit/malloc.h"
+#include "atomickit/string.h"
 
 void astr_init(struct astr *str, size_t len, char *data, void (*destroy)(struct astr *)) {
 	arcp_region_init(str, (void (*)(struct arcp_region *)) destroy);
@@ -100,10 +100,6 @@ struct astr *astr_dup(struct astr *str) {
 	rstr->len = str->len;
 
 	return rstr;
-}
-
-size_t astr_len(struct astr *str) {
-	return str->len;
 }
 
 struct astr *astr_cpy(struct astr *dest, struct astr *src) {
