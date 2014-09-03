@@ -7,4 +7,4 @@ Description: Atomic Kit: functions for speed-conscious atomic datatypes
 Version: @version@
 Libs: -L${libdir} -latomickit
 Libs.private: ${libdir}/libatomickit.a
-Cflags: -fplan9-extensions -fmemory-model=safe -I${includedir}
+Cflags: -fplan9-extensions -I${includedir}

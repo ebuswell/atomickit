@@ -45,7 +45,11 @@
 	                         & ~((uintptr_t) (MIN_SIZE - 1))))
 #define PTR_COUNT(ptr) (((uintptr_t) (ptr)) & ((uintptr_t) (MIN_SIZE - 1)))
 
+/* For debugging amalloc */
 /* #define AMALLOC_DEBUG 1 */
+
+/* Uses (non-atomic) vanilla malloc so that you can debug stuff using
+ * valgrind */
 /* #define AMALLOC_VALGRIND_DEBUG 1 */
 
 #ifndef AMALLOC_VALGRIND_DEBUG
@@ -148,6 +152,15 @@ static void os_free(void *ptr, size_t size) {
 	DEBUG_PRINTF("Deallocated %zd bytes at %p via os_alloc\n", size, ptr);
 }
 
+/* Try to reallocate a memory allocation in place. Returns true if the
+ * reallocation succeeded, false if the reallocation needs to move the
+ * original allocation. Currently, this only succeeds if the number of pages
+ * is shrinking or remaining constant, such that a simple unmap will suffice.
+ * I'm not certain that the mmap function can be safely used to increase the
+ * page size without more information, but even if it can that is probably too
+ * difficult to be worth it, especially given that os_tryrealloc is only used
+ * for reallocating pages over the OS_THRESH, likely to be an uncommon
+ * occurrence. */
 static bool os_tryrealloc(void *ptr __attribute__((unused)),
                           size_t oldsize, size_t newsize) {
 	size_t c_oldsize, c_newsize;
@@ -229,31 +242,41 @@ static void *os_realloc(void *ptr, size_t oldsize, size_t newsize) {
 # else /* AMALLOC_DEBUG */
 #  include "atomickit/rcp.h"
 
+/* Simple array list; we keep it sorted by ptr */
 struct debug_alloc_list {
 	struct arcp_region;
 	size_t len;
 	uintptr_t ptrs[];
 };
 
+/* The variable in which the RCU array list is stored */
 static arcp_t debug_alloc = ARCP_VAR_INIT(NULL);
 
+/* Destruction: free directly to the OS to avoid variables */
 static void __destroy_debug_alloc_list(struct debug_alloc_list *list) {
 	os_free(list,
 	        sizeof(struct debug_alloc_list)
 		+ sizeof(uintptr_t) * list->len);
 };
 
+/* Check if the provided pointer is in the list of allocated pointers, and if
+ * so remove it. */
 static void check_free(void *ptr) {
 	struct debug_alloc_list *list;
 	struct debug_alloc_list *newlist;
 	size_t l, u, i;
+	/* wrap the whole thing in an RCU loop */
 	do {
+		/* load the current list */
 		list = (struct debug_alloc_list *) arcp_load(&debug_alloc);
 		if(list == NULL) {
+			/* the list is null, so this free cannot possibly be
+ 			 * right */
 			DEBUG_PRINTF("Trying to free %p but nothing has "
 			             "been allocated\n", ptr);
 			STACKTRACE();
 		}
+		/* binary search for ptr */
 		l = 0;
 		u = list->len;
 		i = 0;
@@ -264,6 +287,8 @@ static void check_free(void *ptr) {
 			} else if(((uintptr_t) ptr) > list->ptrs[i]) {
 				l = ++i;
 			} else {
+				/* found it; all is well */
+				/* allocate new list */
 				newlist = os_malloc(
 					sizeof(struct debug_alloc_list)
 					+ sizeof(void *) * (list->len - 1));
@@ -275,6 +300,8 @@ static void check_free(void *ptr) {
 					newlist,
 					(arcp_destroy_f)
 					__destroy_debug_alloc_list);
+				/* copy everything over, leaving out the value
+ 				 * at i */
 				newlist->len = list->len - 1;
 				memcpy(newlist->ptrs, list->ptrs,
 				       sizeof(void *) * i);
@@ -284,6 +311,7 @@ static void check_free(void *ptr) {
 				goto try_replace;
 			}
 		}
+		/* failed to find the ptr */
 		DEBUG_PRINTF("Trying to free %p but it has not been "
 		             "allocated or has been deallocated\n", ptr);
 		STACKTRACE();
@@ -291,13 +319,19 @@ static void check_free(void *ptr) {
 	} while(!arcp_compare_store_release(&debug_alloc, list, newlist));
 }
 
+/* Check that the newly allocated ptr is not already in the list of allocated
+ * ptrs, and add it to the list. */
 static void check_alloc(void *ptr) {
 	struct debug_alloc_list *list;
 	struct debug_alloc_list *newlist;
 	size_t l, u, i;
+	/* wrap the whole thing in an RCU loop */
 	do {
+		/* load the list */
 		list = (struct debug_alloc_list *) arcp_load(&debug_alloc);
 		if(list == NULL) {
+			/* nothing has been allocated yet; create a
+ 			 * single-valued list */
 			newlist = os_malloc(
 					sizeof(struct debug_alloc_list)
 					+ sizeof(void *) * 1);
@@ -311,6 +345,7 @@ static void check_alloc(void *ptr) {
 			newlist->ptrs[0] = (uintptr_t) ptr;
 			newlist->len = 1;
 		} else {
+			/* binary search for ptr */
 			l = 0;
 			u = list->len;
 			i = 0;
@@ -321,12 +356,16 @@ static void check_alloc(void *ptr) {
 				} else if(((uintptr_t) ptr) > list->ptrs[i]) {
 					l = ++i;
 				} else {
+					/* ptr exists; it was already
+ 					 * allocated */
 					DEBUG_PRINTF("Trying to allocate "
 					             "already-allocated %p\n",
 					             ptr);
 					STACKTRACE();
 				}
 			}
+			/* not found, add it to the list */
+			/* allocate new list */
 			newlist = os_malloc(
 					sizeof(struct debug_alloc_list)
 					+ sizeof(void *) * (list->len + 1));
@@ -339,6 +378,7 @@ static void check_alloc(void *ptr) {
 					(arcp_destroy_f)
 					__destroy_debug_alloc_list);
 			newlist->len = list->len + 1;
+			/* copy over values, adding ptr at i */
 			memcpy(newlist->ptrs, list->ptrs, sizeof(void *) * i);
 			newlist->ptrs[i] = (uintptr_t) ptr;
 			memcpy(newlist->ptrs + i + 1, list->ptrs + i,
@@ -434,6 +474,7 @@ static inline void *fstack_pop(int bin) {
 		}
 		item = (struct fstack_item *) PTR_DECOUNT(next);
 # ifdef AMALLOC_DEBUG
+		/* double-check stack alignment */
 		if(bin2size(bin) >= PAGE_SIZE) {
 			if((((uintptr_t) item)
 			    & (((uintptr_t) PAGE_SIZE) - 1))
@@ -497,6 +538,7 @@ static inline void *fstack_pop(int bin) {
 	}
 }
 
+/* Atomically push a memory region of the specified size on to the stack. */
 static void fstack_push(int bin, void *ptr) {
 	struct fstack_item *new_item;
 	struct fstack_item *item;
@@ -535,6 +577,7 @@ static void fstack_push(int bin, void *ptr) {
 		}
 		item = (struct fstack_item *) PTR_DECOUNT(next);
 # ifdef AMALLOC_DEBUG
+		/* double-check stack alignment */
 		if(bin2size(bin) >= PAGE_SIZE) {
 			if((((uintptr_t) item)
 			    & (((uintptr_t) PAGE_SIZE) - 1))
@@ -617,13 +660,18 @@ void *amalloc(size_t size) {
 		return NULL;
 	}
 	if(size > OS_THRESH) {
+		/* allocate directly from the os */
 		ret = os_alloc(size);
 		CHECK_ALLOC(ret);
 		return ret;
 	}
+	/* find the bin number for the requested size */
 	bin = size2bin(size);
+	/* try to pop increasingly larger chunks */
 	for(i = bin; i < NSIZES; i++) {
 		if((ret = fstack_pop(i)) != NULL) {
+			/* we popped a larger chunk than necessary, so go
+ 			 * break it down */
 			goto breakdown_chunk;
 		}
 	}
@@ -635,10 +683,13 @@ void *amalloc(size_t size) {
 	/* i = NSIZES; -- already nsizes from for loop above */
 	i -= 1;
 breakdown_chunk:
+	/* subdivide it, keeping the later half from the os, until the
+ 	 * chunk we're left with is appropriate to the requested size. */
 	while(i-- > bin) {
 		fstack_push(i, ret + bin2size(i));
 	}
 # ifdef AMALLOC_DEBUG
+	/* double-check alignment */
 	if(size >= PAGE_SIZE) {
 		if((((uintptr_t) ret) & (((uintptr_t) PAGE_SIZE) - 1))
 		   != 0) {
@@ -665,9 +716,11 @@ void afree(void *ptr, size_t size) {
 	if(size == 0) {
 		return;
 	} else if(size > OS_THRESH) {
+		/* free directly to the os */
 		os_free(ptr, size);
 	} else {
 # ifdef AMALLOC_DEBUG
+		/* double-check alignment */
 		if(size >= PAGE_SIZE) {
 			if((((uintptr_t) ptr) & (((uintptr_t) PAGE_SIZE) - 1))
 			   != 0) {
@@ -685,6 +738,7 @@ void afree(void *ptr, size_t size) {
 			}
 		}
 # endif /* AMALLOC_DEBUG */
+		/* push the chunk back on to the free list */
 		fstack_push(size2bin(size), ptr);
 	}
 }
@@ -695,9 +749,11 @@ bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
 	if(oldsize == 0 && newsize == 0) {
 		return true;
 	} else if(oldsize > OS_THRESH && newsize > OS_THRESH) {
+		/* try to reallocate directly from the OS */
 		return os_tryrealloc(ptr, oldsize, newsize);
 	} else {
 # ifdef AMALLOC_DEBUG
+		/* double-check alignment */
 		if(oldsize >= PAGE_SIZE) {
 			if((((uintptr_t) ptr) & (((uintptr_t) PAGE_SIZE) - 1))
 			   != 0) {
@@ -717,6 +773,8 @@ bool atryrealloc(void *ptr, size_t oldsize, size_t newsize) {
 			}
 		}
 # endif /* AMALLOC_DEBUG */
+		/* if the chunk size is already large enough to accomodate the
+ 		 * new allocation, then we succeed; otherwise, we fail */
 		if(size2bin(oldsize) == size2bin(newsize)) {
 			return true;
 		} else {
@@ -733,15 +791,18 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 		if(newsize == 0) {
 			return ptr;
 		} else {
+			/* simple allocation */
 			MAYBE_CHECK_FREE(ptr, oldsize);
 			return amalloc(newsize);
 		}
 	} else if(newsize == 0) {
+		/* simple free */
 		afree(ptr, oldsize);
 		MAYBE_CHECK_ALLOC(ptr, newsize);
 		return ptr;
 	}
 	if(oldsize > OS_THRESH && newsize > OS_THRESH) {
+		/* reallocate directly from the OS */
 		ret = os_realloc(ptr, oldsize, newsize);
 		if(ret != NULL) {
 			CHECK_FREE(ptr);
@@ -750,6 +811,7 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 		return ret;
 	} else {
 # ifdef AMALLOC_DEBUG
+		/* double-check alignment */
 		if(oldsize >= PAGE_SIZE) {
 			if((((uintptr_t) ptr) & (((uintptr_t) PAGE_SIZE) - 1))
 			   != 0) {
@@ -769,15 +831,19 @@ void *arealloc(void *ptr, size_t oldsize, size_t newsize) {
 			}
 		}
 # endif /* AMALLOC_DEBUG */
+		/* if the chunk size is the same, do nothing */
 		if(size2bin(oldsize) == size2bin(newsize)) {
 			return ptr;
 		}
 	}
+	/* allocate a new chunk */
 	ret = amalloc(newsize);
 	if(ret == NULL) {
 		return NULL;
 	}
+	/* copy over the contents */
 	memcpy(ret, ptr, oldsize > newsize ? newsize : oldsize);
+	/* free the old chunk */
 	afree(ptr, oldsize);
 	return ret;
 }

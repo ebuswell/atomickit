@@ -1,4 +1,4 @@
-/** @file misc.h
+/** @file atomickit/arch/misc.h
  * misc.h
  *
  * Gives us cpu_yield()

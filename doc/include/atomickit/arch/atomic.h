@@ -1,0 +1,1 @@
+../../../../include/i686/atomickit/arch/atomic.h

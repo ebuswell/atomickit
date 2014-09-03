@@ -37,32 +37,41 @@
  */
 struct aqueue_node {
 	struct arcp_region;
-	arcp_t next; /** the next item in the queue */
-	arcp_t item; /** the content of this node */
+	arcp_t next; /**< the next item in the queue */
+	arcp_t item; /**< the content of this node */
 };
 
 /**
  * Atomic Queue.
  */
 typedef struct {
-	arcp_t head;
-	arcp_t tail;
+	arcp_t head; /**< the first item in the queue */
+	arcp_t tail; /**< the last item in the queue */
 } aqueue_t;
 
+/**
+ * Initialization value for `struct aqueue_node`.
+ */
 #define AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, item)	\
 	{ ARCP_REGION_VAR_INIT(ptrcount, refcount, NULL, NULL),	\
 	  ARCP_VAR_INIT(next), ARCP_VAR_INIT(item) }
 
+/**
+ * Initialization value for a sentinel `struct aqueue_node`.
+ */
 #define AQUEUE_SENTINEL_VAR_INIT(ptrcount, refcount, next)	\
 	AQUEUE_NODE_VAR_INIT(ptrcount, refcount, next, NULL)
 
+/**
+ * Initialization value for `aqueue_t`.
+ */
 #define AQUEUE_VAR_INIT(head, tail) \
 	{ ARCP_VAR_INIT(head), ARCP_VAR_INIT(tail) }
 
 /**
  * Initializes a queue.
  *
- * @param queue a pointer to the queue being initialized.
+ * @param aqueue a pointer to the queue being initialized.
  *
  * @returns zero on success, nonzero on error.
  */
@@ -111,7 +120,7 @@ bool aqueue_cmpdeq(aqueue_t *aqueue, struct arcp_region *item);
 /**
  * Destroys a queue.
  *
- * @param queue a pointer to the queue being destroyed.
+ * @param aqueue a pointer to the queue being destroyed.
  *
  * @returns zero on success or nonzero if one or more of the contained items
  * failed in the destructor.

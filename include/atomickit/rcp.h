@@ -46,16 +46,23 @@ struct arcp_region;
  */
 typedef _Atomic(struct arcp_region *) arcp_t;
 
+/**
+ * Destruction function type for arcp_region.
+ */
 typedef void (*arcp_destroy_f)(struct arcp_region *);
 
+/**
+ * The type for the refcount as it is stored in an arcp_region.
+ */
 typedef union {
 	struct {
-		unsigned int destroy_lock:1; /** Lock during attempted
-					      *  destruction */
-		int storecount:15; /** Number of pointers referencing this */
-		int16_t usecount; /** Number of checked out references */
-	} v;
-	uint_least32_t p;
+		unsigned int destroy_lock:1; /**< Lock during attempted
+					      *   destruction */
+		int storecount:15; /**< Number of pointers referencing
+		                    *   this */
+		int16_t usecount; /**< Number of checked out references */
+	} v; /**< value */
+	uint_least32_t p; /**< pun */
 } arcp_refcount_t;
 
 /**
@@ -68,10 +75,10 @@ typedef union {
  * pointers.
  */
 struct arcp_region {
-	arcp_destroy_f destroy; /** Pointer to a destruction function. */
-	atomic_uint_least32_t refcount; /** References to this region. */
-	arcp_t weakref; /** Pointer to the weak reference for this
-			 *  region; initially NULL. */
+	arcp_destroy_f destroy; /**< Pointer to a destruction function. */
+	atomic_uint_least32_t refcount; /**< References to this region. */
+	arcp_t weakref; /**< Pointer to the weak reference for this
+			 *   region; initially NULL. */
 };
 
 /**
@@ -83,16 +90,15 @@ struct arcp_region {
  */
 struct arcp_weakref {
 	struct arcp_region;
-	arcp_t target;
+	arcp_t target; /**< The arcp_region to which this is a reference. */
 };
 
 /**
- * \def ARCP_ALIGN The alignment of the data portion of an rcp region. The
- * maximum number of threads concurrently checking out a given item from a
- * given transaction (not the number who concurrenty have the item checked
- * out, which should be sufficient for all purposes) will be equal to
- * `ARCP_ALIGN - 1`. Check out will block for all threads above this
- * threshold.
+ * The alignment of the data portion of an rcp region. The maximum number of
+ * threads concurrently checking out a given item from a given transaction
+ * (not the number who concurrenty have the item checked out, which should be
+ * sufficient for all purposes) will be equal to `ARCP_ALIGN - 1`. Check out
+ * will block for all threads above this threshold.
  */
 #define ARCP_ALIGN alignof(struct arcp_region *)
 
@@ -127,6 +133,7 @@ struct arcp_weakref {
  */
 #define ARCP_VAR_INIT(region) ATOMIC_VAR_INIT(region)
 
+/* Initialization value for a uint32_t that is punned as an arcp_refcount_t */
 #define __ARCP_REFCOUNT_INIT(scount, ucount)				\
 	(((arcp_refcount_t)						\
 	  { .v = { .destroy_lock = 0,					\
@@ -155,7 +162,7 @@ struct arcp_weakref {
  * calling function.
  *
  * @param region a pointer to a reference counted region.  This is typically
- * allocated with `amalloc(ARCP_REGION_OVERHEAD + <user data size>).
+ * allocated with `amalloc(ARCP_REGION_OVERHEAD + \<user data size\>).
  * @param destroy pointer to a function that will destroy the region once it
  * is no longer in use.  If no cleanup is needed, this could just be a simple
  * wrapper around `afree`.
@@ -253,6 +260,15 @@ void arcp_release(struct arcp_region *region);
  */
 struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref);
 
+/**
+ * Loads the item to which the weak reference refers and releases the
+ * reference on the weakref.
+ *
+ * @param weakref the weak reference for which to load the item.
+ *
+ * @returns the item to which the weak reference refers, or NULL if the item
+ * has been destroyed.
+ */
 struct arcp_region *arcp_weakref_load_release(struct arcp_weakref *weakref);
 
 /**
@@ -370,27 +386,55 @@ struct arcp_region *arcp_exchange_weak(arcp_t *rcp,
 bool arcp_cas(arcp_t *rcp, struct arcp_region *oldregion,
               struct arcp_region *newregion);
 
-bool arcp_cas_weak(arcp_t *rcp, struct arcp_region *oldregion,
-                   struct arcp_region *newregion);
-
+/**
+ * Compare the content of the reference counted pointer with `oldregion`, and
+ * if equal set its content to `newregion`; release the reference on both
+ * pointers regardless of outcome.
+ *
+ * Only succeeds if `oldregion` is still the content of the pointer.
+ *
+ * @param rcp the pointer for which to commit the new content.
+ * @param oldregion the previous content of the transaction.
+ * @param newregion the new content of the transaction.
+ *
+ * @returns true if set to newregion, false otherwise.
+ */
 bool arcp_cas_release(arcp_t *rcp, struct arcp_region *oldregion,
                       struct arcp_region *newregion);
 
-bool arcp_cas_release_weak(arcp_t *rcp, struct arcp_region *oldregion,
-                           struct arcp_region *newregion);
-
+/**
+ * Get the number of checked out references to the region.
+ *
+ * @param region the region for which to get the number of references.
+ *
+ * @returns the number of checked out references.
+ */
 static inline int arcp_usecount(struct arcp_region *region) {
 	arcp_refcount_t refcount;
 	refcount.p = ak_load(&region->refcount, mo_consume);
 	return refcount.v.usecount;
 }
 
+/**
+ * Get the number of stored references to the region.
+ *
+ * @param region the region for which to get the number of references.
+ *
+ * @returns the number of stored references.
+ */
 static inline int arcp_storecount(struct arcp_region *region) {
 	arcp_refcount_t refcount;
 	refcount.p = ak_load(&region->refcount, mo_consume);
 	return refcount.v.storecount;
 }
 
+/**
+ * Load the region's weak reference without acquiring a reference to it.
+ *
+ * @param region the region whose weak reference we want to load.
+ *
+ * @returns the weak reference for the given region.
+ */
 static inline struct arcp_weakref *
 arcp_weakref_phantom(struct arcp_region *region) {
 	return region == NULL ? NULL
@@ -398,6 +442,13 @@ arcp_weakref_phantom(struct arcp_region *region) {
 				ak_load(&region->weakref, mo_acquire));
 }
 
+/**
+ * Load a region from a pointer without acquiring a reference to it.
+ *
+ * @param rcp the pointer from which to load the current contents.
+ *
+ * @returns the current contents of the pointer.
+ */
 static inline struct arcp_region *arcp_load_phantom(arcp_t *rcp) {
 	return __ARCP_PTRDECOUNT(ak_load(rcp, mo_acquire));
 }

@@ -27,22 +27,30 @@
 #define __ARCP_HOHDEL __ARCP_COUNTMASK
 #define __ARCP_WEAKMAX (__ARCP_COUNTMASK - 1)
 
-/* Returns true when the region should be deleted */
+/* Update the references for the region, adding storedelta to storecount and
+ * usedelta to usecount. Returns true when the region should be deleted. */
 static inline bool __arcp_urefs(struct arcp_region *region,
                                 int16_t storedelta, int16_t usedelta) {
 	arcp_refcount_t count, o_count;
 	bool destroy;
+	/* load o_count via the pun */
 	o_count.p = ak_load(&region->refcount, mo_consume);
 	do {
+		/* set count to o_count via the pun */
 		count.p = o_count.p;
+		/* alter count */
 		count.v.storecount += storedelta;
 		count.v.usecount += usedelta;
 		if(count.v.storecount == 0
 		   && count.v.usecount == 0
 		   && count.v.destroy_lock == 0) {
+			/* if we've reached zero, and the destroy lock isn't
+ 			 * set, try to set the destroy lock */
 			destroy = true;
 			count.v.destroy_lock = 1;
 		} else {
+			/* either reference count is not zero, or the destroy
+ 			 * lock is set */
 			destroy = false;
 		}
 	} while(unlikely(!ak_cas(&region->refcount, &o_count.p, count.p,
@@ -50,81 +58,109 @@ static inline bool __arcp_urefs(struct arcp_region *region,
 	return destroy;
 }
 
+/* Try to release the destroy lock for the region. Returns true if the lock
+ * has been released, false if the destroy lock could not be released. */
 static bool __arcp_try_release_destroy_lock(struct arcp_region *region) {
-	arcp_refcount_t count;
-	count.p = ak_load(&region->refcount, mo_consume);
+	arcp_refcount_t count, o_count;
+	/* load o_count via the pun */
+	o_count.p = ak_load(&region->refcount, mo_consume);
 	do {
-		if(count.v.storecount == 0
-		   && count.v.usecount == 0) {
+		if(o_count.v.storecount == 0
+		   && o_count.v.usecount == 0) {
 			/* If the storecount and usecount are zero, we would
  			 * be again responsible for destroying, so don't
  			 * release the lock. */
 			return false;
 		}
+		/* set count via the pun */
+		count.p = o_count.p;
+		/* unset the destroy lock */
+		count.v.destroy_lock = 0;
 	} while(unlikely(!ak_cas(&region->refcount,
-	                         &count.p, (uint_least32_t)0,
+	                         &o_count.p, count.p,
 	                         mo_acq_rel, mo_consume)));
 	return true;
 }
 
+/* Assuming the reference count is (or was) 0 and we hold the destroy_lock,
+ * try to destroy the region. */
 static void __arcp_try_destroy(struct arcp_region *region) {
 	struct arcp_weakref *weakref;
 	struct arcp_region *target_o, *target;
 	arcp_refcount_t count;
 
+	/* load the weakref for the region */
 	weakref =
 		(struct arcp_weakref *) ak_load(&region->weakref, mo_consume);
 	if(weakref == NULL) {
+		/* if there's no weakref, just run the destruction function */
 		if(region->destroy != NULL) {
 			region->destroy(region);
 		}
 		return;
 	}
+	/* load the weakref target pointer to get any count which potentially
+ 	 * has not yet been migrated to the region itself */
 	target_o = ak_load(&weakref->target, mo_consume);
 retry:
 	switch(__ARCP_PTR2COUNT(target_o)) {
 	default:
-		/* Transfer the count */
+		/* there is a count on weakref->target; transfer it */
 		target = __ARCP_PTRDECOUNT(target_o);
+		/* set target to a count-free version */
 		if(likely(ak_cas_strong(&weakref->target,
 		                        &target_o, target,
 		                        mo_acq_rel, mo_consume))) {
+			/* update our count */
 			__arcp_urefs(region, 0, __ARCP_PTR2COUNT(target_o));
+			/* try to release the destroy lock and return */
 			if(likely(__arcp_try_release_destroy_lock(region))) {
 				return;
-			}
-		}
+			} /* otherwise failed to release destroy lock, fall
+			   * through to loop */
+		} /* otherwise target changed, loop */
 		goto retry;
 	case 0:
-		/* set to __ARCP_HOHDEL */
+		/* there is no count on weakref->target awaiting a transfer,
+ 		 * we have been count-free at at least one moment */
+		/* use a hand-over-hand method to properly delete
+ 		 * weakref->target; set count on weakref->target to
+ 		 * __ARCP_HOHDEL, which is a value only set by this
+ 		 * function */
 		target = __ARCP_PTRSETCOUNT(target_o, __ARCP_HOHDEL);
 		if(unlikely(!ak_cas_strong(&weakref->target,
 		                           &target_o, target,
 		                           mo_acq_rel, mo_consume))) {
+			/* failed; loop */
 			goto retry;
 		}
 		target_o = target;
 		/* fall through */
 	case __ARCP_HOHDEL:
+		/* weakref->target is being prepared for deletion;
+ 		 * re-check refcount */
 		count.p = ak_load(&region->refcount, mo_consume);
-		/* re-check refcount */
 		if(unlikely(count.v.storecount != 0 || count.v.usecount != 0)) {
+			/* refcount is no longer zero */
 			if(likely(__arcp_try_release_destroy_lock(region))) {
 				return;
-			}
-			/* Otherwise, region->refcount has *become* 0 */
+			} /* otherwise, region->refcount has *become* 0, so
+			   * fall through as if the above test succeeded */
 		}
 		/* kill the reference */
 		if(unlikely(!ak_cas_strong(&weakref->target,
 		                           &target_o, NULL,
 		                           mo_acq_rel, mo_consume))) {
+			/* failed; loop */
 			goto retry;
 		}
-		/* fall through */
+		/* finished deleting weakref target; fall through */
 	}
+	/* update weakref reference count and destroy if appropriate */
 	if(__arcp_urefs(weakref, -1, 0)) {
 		__arcp_try_destroy(weakref);
 	}
+	/* destroy region */
 	if(region->destroy != NULL) {
 		region->destroy(region);
 	}
@@ -135,6 +171,7 @@ static void __arcp_destroy_weakref(struct arcp_weakref *stub) {
 }
 
 void arcp_region_init(struct arcp_region *region, void (*destroy)(struct arcp_region *)) {
+	/* initialize to storecount 0, usecount 1 (the caller) */
 	ak_init(&region->refcount, __ARCP_REFCOUNT_INIT(0, 1));
 	region->destroy = destroy;
 	ak_init(&region->weakref, NULL);
@@ -147,21 +184,27 @@ int arcp_region_init_weakref(struct arcp_region *region) {
 	if(region == NULL) {
 		return 0;
 	}
+	/* load current weakref */
 	nostub =
 		(struct arcp_weakref *) ak_load(&region->weakref, mo_consume);
 	if(nostub != NULL) {
+		/* weakref has already been initialized */
 		return 0;
 	}
+	/* allocate a new weakref */
 	stub = amalloc(sizeof(struct arcp_weakref));
 	if(stub == NULL) {
 		return -1;
 	}
+	/* initialize the weakref */
 	ak_init(&stub->target, region);
+	/* storecount 1 (the region), usecount 0 */
 	ak_init(&stub->refcount, __ARCP_REFCOUNT_INIT(1, 0));
 	stub->destroy = (arcp_destroy_f) __arcp_destroy_weakref;
 	ak_init(&stub->weakref, NULL);
 	if(unlikely(!ak_cas(&region->weakref, &nostub, stub,
 	                    mo_acq_rel, mo_relaxed))) {
+		/* someone else set the weakref */
 		afree(stub, sizeof(struct arcp_weakref));
 	}
 	return 0;
@@ -198,16 +241,18 @@ struct arcp_region *arcp_weakref_load(struct arcp_weakref *weakref) {
 	if(weakref == NULL) {
 		return NULL;
 	}
+	/* load the target */
 	ptr = ak_load(&weakref->target, mo_consume);
 	do {
 	retry:
 		switch(__ARCP_PTR2COUNT(ptr)) {
 		case __ARCP_WEAKMAX:
-			/* Spinlock if too many threads are accessing this at once. */
+			/* spinlock if too many threads are accessing this at once. */
 			cpu_yield();
 			ptr = ak_load(&weakref->target, mo_consume);
 			goto retry;
 		case __ARCP_HOHDEL:
+			/* attempted deletion; treat it as 0 */
 			desired = __ARCP_PTRSETCOUNT(ptr, 1);
 			break;
 		default:
@@ -268,6 +313,7 @@ struct arcp_region *arcp_load(arcp_t *rcp) {
  	 * us, a village is burnt. The point's made.
  	 *
  	 * ---Dr. Zhivago, 1964
+ 	 * (i.e. don't sweat whose reference is whose)
  	 */
 	struct arcp_region *ptr;
 	struct arcp_region *ret;

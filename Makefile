@@ -133,6 +133,8 @@ clean:
 	rm -f ${TESTOBJS}
 	rm -f unittest-shared
 	rm -f unittest-static
+	rm -rf doc/man
+	rm -rf doc/html
 
 check-shared: unittest-shared
 	./unittest-shared
@@ -141,3 +143,8 @@ check-static: unittest-static
 	./unittest-static
 
 check: check-shared
+
+doc: doxygen
+
+doxygen:
+	doxygen

@@ -12,27 +12,27 @@ source=('git+https://github.com/ebuswell/atomickit.git')
 md5sums=('SKIP')
 
 pkgver() {
-  cd "${srcdir}/${_pkgname}"
-  _date="$(git log -1 --format='%cd' --date=short)"
-  _rev="$(git rev-list $(git rev-parse --since=${_date}T00:00:00) --count HEAD)"
-  _date="$(echo -n ${_date}|tr -d -- '-')"
-  echo "${_date}.${_rev}"
+	cd "${srcdir}/${_pkgname}"
+	_date="$(git log -1 --format='%cd' --date=short)"
+	_rev="$(git rev-list $(git rev-parse --since=${_date}T00:00:00) --count HEAD)"
+	_date="$(echo -n ${_date}|tr -d -- '-')"
+	echo "${_date}.${_rev}"
 }
 
 build() {
-  cd "${srcdir}/${_pkgname}"
-  [ -e config.mk ] || ln -s config.def.mk config.mk
-  PREFIX=/usr make
+	cd "${srcdir}/${_pkgname}"
+	[ -e config.mk ] || ln -s config.def.mk config.mk
+	PREFIX=/usr make
 }
 
 check() {
-  cd "${srcdir}/${_pkgname}"
-  [ -e config.mk ] || ln -s config.def.mk config.mk
-  PREFIX=/usr make check
+	cd "${srcdir}/${_pkgname}"
+	[ -e config.mk ] || ln -s config.def.mk config.mk
+	PREFIX=/usr make check
 }
 
 package() {
-  cd "${srcdir}/${_pkgname}"
-  [ -e config.mk ] || ln -s config.def.mk config.mk
-  PREFIX=/usr DESTDIR=${pkgdir} make install
+	cd "${srcdir}/${_pkgname}"
+	[ -e config.mk ] || ln -s config.def.mk config.mk
+	PREFIX=/usr DESTDIR=${pkgdir} make install
 }

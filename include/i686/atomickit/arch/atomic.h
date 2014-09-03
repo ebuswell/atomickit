@@ -1,4 +1,4 @@
-/** @file atomic.h
+/** @file atomickit/arch/atomic.h
  * atomic.h
  *
  * Compatibility functions for versions of C without C11 atomics.

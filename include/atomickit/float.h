@@ -5,8 +5,7 @@
  * be usable just like the corresponding C11 atomic functions, with
  * `volatile atomic_float *` and such substituted for the usual
  * `volatile <atomic type> *`.  Atomic add and subtract are not
- * included since these are would not be generically possible without
- * locks.
+ * included since these would not be generically possible without locks.
  */
 /*
  * Copyright 2013 Evan Buswell

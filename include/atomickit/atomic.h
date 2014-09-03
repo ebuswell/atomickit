@@ -1,7 +1,8 @@
-/** @file atomic.h
+/** @file atomickit/atomic.h
  *
  * This provides `likely`/`unlikely` and all of the C11 atomic functions, from
- * the C11 atomic header if it exists.
+ * the C11 atomic header if it exists. How cool will it be when I no longer
+ * have to maintain any of this crap?
  */
 /*
  * Copyright 2013 Evan Buswell
@@ -95,10 +96,8 @@
 #endif
 
 #ifndef __CLANG_ATOMICS
-/*
- * No native support for _Atomic(). Place object in structure to
- * prevent most forms of direct non-atomic access.
- */
+/* No native support for _Atomic(). Place object in structure to
+ * prevent most forms of direct non-atomic access. */
 # define _Atomic(T)	struct { T volatile __val; }
 #endif
 
@@ -395,27 +394,94 @@ typedef struct {
 #endif
 
 /* Convenience abbreviations */
+/**
+ * Convenience abbreviation for memory_order_relaxed.
+ */
 #define mo_relaxed memory_order_relaxed
+/**
+ * Convenience abbreviation for memory_order_consume.
+ */
 #define mo_consume memory_order_consume
+/**
+ * Convenience abbreviation for memory_order_acquire.
+ */
 #define mo_acquire memory_order_acquire
+/**
+ * Convenience abbreviation for memory_order_release.
+ */
 #define mo_release memory_order_release
+/**
+ * Convenience abbreviation for memory_order_acq_rel.
+ */
 #define mo_acq_rel memory_order_acq_rel
+/**
+ * Convenience abbreviation for memory_order_seq_cst.
+ */
 #define mo_seq_cst memory_order_seq_cst
 
+/**
+ * Convenience abbreviation for atomic_thread_fence.
+ */
 #define ak_fence atomic_thread_fence
+/**
+ * Convenience abbreviateion for atomic_signal_fence.
+ */
 #define ak_sigfence atomic_signal_fence
+/**
+ * Convenience abbreviateion for atomic_is_lock_free.
+ */
 #define ak_is_nb atomic_is_lock_free
+/**
+ * Convenience abbreviation for atomic_init.
+ */
 #define ak_init atomic_init
+/**
+ * Convenience abbreviation for atomic_store_explicit.
+ */
 #define ak_store atomic_store_explicit
+/**
+ * Convenience abbreviation for atomic_load_explicit.
+ */
 #define ak_load atomic_load_explicit
+/**
+ * Convenience abbreviation for atomic_compare_exchange_weak_explicit.
+ */
 #define ak_cas atomic_compare_exchange_weak_explicit
+/**
+ * Convenience abbreviation for atomic_compare_exchange_strong_explicit.
+ */
 #define ak_cas_strong atomic_compare_exchange_strong_explicit
+/**
+ * Convenience abbreviation for atomic_exchange_explicit.
+ */
 #define ak_swap atomic_exchange_explicit
+/**
+ * Convenience abbreviation for atomic_fetch_add_explicit.
+ */
 #define ak_ldadd atomic_fetch_add_explicit
+/**
+ * Convenience abbreviation for atomic_fetch_sub_explicit.
+ */
 #define ak_ldsub atomic_fetch_sub_explicit
+/**
+ * Convenience abbreviation for atomic_fetch_or_explicit.
+ */
+#define ak_ldand atomic_fetch_or_explicit
+/**
+ * Convenience abbreviation for atomic_fetch_xor_explicit.
+ */
 #define ak_ldxor atomic_fetch_xor_explicit
-#define ak_ldadd atomic_fetch_add_explicit
+/**
+ * Convenience abbreviation for atomic_fetch_and_explicit.
+ */
+#define ak_ldand atomic_fetch_and_explicit
+/**
+ * Convenience abbreviation for atomic_flag_test_and_set_explicit.
+ */
 #define aflag_ts atomic_flag_test_and_set_explicit
+/**
+ * Convenience abbreviation for atomic_store_explicit.
+ */
 #define aflag_clear atomic_flag_clear_explicit
 
 #include <atomickit/arch/misc.h>
