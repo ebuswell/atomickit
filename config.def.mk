@@ -9,12 +9,12 @@ ARCH?=${UNAME_ARCH}
 # ARCH?=i686
 
 CC?=gcc
-CFLAGS?=-Og -g3 \
-        -Wall -Wextra -Wmissing-prototypes -Wredundant-decls \
-        -Wdeclaration-after-statement
+CFLAGS?=-Og -g3
 LDFLAGS?=
 AR?=ar
 ARFLAGS?=rv
 
+CFLAGS+=-Wall -Wextra -Wmissing-prototypes -Wredundant-decls \
+        -Wdeclaration-after-statement
 CFLAGS+=-fplan9-extensions
 CFLAGS+=-Iinclude -Iinclude/${ARCH}

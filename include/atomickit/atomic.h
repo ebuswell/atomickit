@@ -466,7 +466,7 @@ typedef struct {
 /**
  * Convenience abbreviation for atomic_fetch_or_explicit.
  */
-#define ak_ldand atomic_fetch_or_explicit
+#define ak_ldor atomic_fetch_or_explicit
 /**
  * Convenience abbreviation for atomic_fetch_xor_explicit.
  */
