@@ -149,6 +149,14 @@ struct arcp_weakref {
 	  ARCP_VAR_INIT(weakref) }
 
 /**
+ * Static initialization value for `struct arcp_region`.
+ */
+#define ARCP_REGION_STATIC_VAR_INIT(weakref)			\
+	{ NULL, ATOMIC_VAR_INIT(1), ARCP_VAR_INIT(weakref) }
+/* note that it doesn't matter where the 1 goes, to the destroy_lock,
+ * storecount, or usecount; it will always block collection. */
+
+/**
  * Initialization value for `struct arcp_weakref`.
  */
 #define ARCP_WEAKREF_VAR_INIT(storecount, usecount, destroy, ptr)	\
