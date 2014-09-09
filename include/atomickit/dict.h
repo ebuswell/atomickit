@@ -194,6 +194,24 @@ struct adict *adict_dup_cstrput(struct adict *dict,
                                 char *key, struct arcp_region *value);
 
 /**
+ * Create a dictionary with the value for the given key.
+ *
+ * @param key the key to set.
+ * @param value the value to set.
+ * @returns the new dictionary.
+ */
+struct adict *adict_create_put(struct astr *key, struct arcp_region *value);
+
+/**
+ * Create a dictionary with the value for the given key, using a cstr key.
+ *
+ * @param key the key to set.
+ * @param value the value to set.
+ * @returns the new dictionary.
+ */
+struct adict *adict_create_cstrput(char *key, struct arcp_region *value);
+
+/**
  * Delete the dictionary entry for the given key.
  *
  * This will invalidate the passed in dictionary

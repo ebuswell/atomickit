@@ -388,6 +388,37 @@ set:
 	return new_dict;
 }
 
+struct adict *adict_create_put(struct astr *key,
+                               struct arcp_region *value) {
+	struct adict *new_dict;
+	/* allocate memory for the new dictionary */
+	new_dict = amalloc(ADICT_SIZE(1));
+	if(new_dict == NULL) {
+		return NULL;
+	}
+	/* acquire passed-in key and value */
+	new_dict->items[0].key = arcp_acquire(key);
+	new_dict->items[0].value = arcp_acquire(value);
+	/* set up dictionary */
+	new_dict->len = 1;
+	arcp_region_init(new_dict, (arcp_destroy_f) adict_destroy);
+	return new_dict;
+}
+
+struct adict *adict_create_cstrput(char *key,
+                                   struct arcp_region *value) {
+	struct adict *new_dict;
+	struct astr *astrkey;
+	astrkey = astr_cstrdup(key);
+	if(astrkey == NULL) {
+		return NULL;
+	}
+	new_dict = adict_create_put(astrkey, value);
+	arcp_release(astrkey); /* we want to release this whether or not
+				  there's an error. */
+	return new_dict;
+}
+
 struct adict *adict_del(struct adict *dict, struct astr *key) {
 	size_t i;
 	size_t len;
