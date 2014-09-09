@@ -16,14 +16,13 @@
         install-static install-static-strip install-shared-strip \
         install-all-static install-all-shared install-all-static-strip \
         install-all-shared-strip install install-strip uninstall clean \
-        check-shared check-static check
+        check-shared check-static check doc
 
 .SUFFIXES: .o .pic.o
 
 include config.mk
 
-MAJOR=0
-MINOR=3
+VERSION=0.3
 
 SRCS=src/rcp.c src/queue.c src/malloc.c src/array.c src/string.c src/dict.c
 
@@ -48,6 +47,8 @@ OBJS=${SRCS:.c=.o}
 PICOBJS=${SRCS:.c=.pic.o}
 TESTOBJS=${TESTSRCS:.c=.o}
 
+MAJOR=${shell echo ${VERSION}|cut -d . -f 1}
+
 all: shared atomickit.pc
 
 .c.o:
@@ -64,10 +65,12 @@ libatomickit.a: ${OBJS}
 	${AR} ${ARFLAGS}c libatomickit.a ${OBJS}
 
 unittest-shared: libatomickit.so ${TESTOBJS}
-	${CC} ${CFLAGS} ${LDFLAGS} -L`pwd` -Wl,-rpath,`pwd` ${TESTOBJS} -latomickit -o unittest-shared
+	${CC} ${CFLAGS} ${LDFLAGS} -L`pwd` -Wl,-rpath,`pwd` \
+	      ${TESTOBJS} -latomickit -o unittest-shared
 
 unittest-static: libatomickit.a ${TESTOBJS}
-	${CC} ${CFLAGS} ${LDFLAGS} -static -L`pwd` ${TESTOBJS} -latomickit -o unittest-static
+	${CC} ${CFLAGS} ${LDFLAGS} -static -L`pwd` \
+	      ${TESTOBJS} -latomickit -o unittest-static
 
 atomickit.pc: atomickit.pc.in config.mk Makefile
 	sed -e 's!@prefix@!${PREFIX}!g' \
@@ -83,7 +86,8 @@ static: libatomickit.a
 install-headers:
 	(umask 022; mkdir -p ${DESTDIR}${INCLUDEDIR}/atomickit/arch)
 	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit ${HEADERS}
-	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit/arch ${ARCHHEADERS}
+	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit/arch \
+	        ${ARCHHEADERS}
 
 install-pkgconfig: atomickit.pc
 	(umask 022; mkdir -p ${DESTDIR}${PKGCONFIGDIR})
@@ -91,9 +95,12 @@ install-pkgconfig: atomickit.pc
 
 install-shared: shared
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
-	install -m 755 libatomickit.so ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR}
-	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR} ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
-	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}.${MINOR} ${DESTDIR}${LIBDIR}/libatomickit.so
+	install -m 755 libatomickit.so \
+	        ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} \
+	        ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
+	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} \
+	        ${DESTDIR}${LIBDIR}/libatomickit.so
 
 install-static: static
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
@@ -105,9 +112,11 @@ install-shared-strip: install-shared
 install-static-strip: install-static
 	strip --strip-unneeded ${DESTDIR}${LIBDIR}/libatomickit.a
 
-install-all-static: static atomickit.pc install-static install-headers install-pkgconfig
+install-all-static: static atomickit.pc install-static install-headers \
+                    install-pkgconfig
 
-install-all-shared: shared atomickit.pc install-shared install-headers install-pkgconfig
+install-all-shared: shared atomickit.pc install-shared install-headers \
+                    install-pkgconfig
 
 install-all-shared-strip: install-all-shared install-shared-strip
 
@@ -119,6 +128,7 @@ install-strip: install-all-shared-strip
 
 uninstall: 
 	rm -f ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+	rm -f ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
 	rm -f ${DESTDIR}${LIBDIR}/libatomickit.so
 	rm -f ${DESTDIR}${LIBDIR}/libatomickit.a
 	rm -f ${DESTDIR}${PKGCONFIGDIR}/atomickit.pc
