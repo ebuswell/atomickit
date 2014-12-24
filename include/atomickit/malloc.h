@@ -19,7 +19,7 @@
  * http://www.stanford.edu/class/ee380/Abstracts/070221_LockFreeHash.pdf
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -46,8 +46,8 @@
  *
  * @param size the desired size of the memory region.
  *
- * @returns a pointer to an allocated, but not initialized, memory
- * region, or NULL on error.
+ * @returns a pointer to an allocated, but not initialized, memory region, or
+ * NULL on error.
  */
 void *amalloc(size_t size);
 
@@ -66,23 +66,23 @@ void afree(void *ptr, size_t size);
  * @param oldsize the currently allocated size of the memory region.
  * @param newsize the desired size of the memory region.
  *
- * @returns a pointer to the same, or a new memory region, or NULL on
- * error.  The new memory region will be filled with the old data,
- * possibly truncated by `newsize`. Any memory contents beyond what
- * was defined previously is undefined.
+ * @returns a pointer to the same, or a new memory region, or NULL on error.
+ * The new memory region will be filled with the old data, possibly truncated
+ * by `newsize`. Any memory contents beyond what was defined previously is
+ * undefined.
  */
 void *arealloc(void *ptr, size_t oldsize, size_t newsize);
 
 /**
- * Resize a region previously allocated with `amalloc()` if it can be
- * done in place.
+ * Resize a region previously allocated with `amalloc()` if it can be done in
+ * place.
  *
  * @param ptr a pointer to the memory region to be resized.
  * @param oldsize the currently allocated size of the memory region.
  * @param newsize the desired size of the memory region.
  *
- * @returns true if the memory region was resized, false if it could
- * not be resized in place.
+ * @returns true if the memory region was resized, false if it could not be
+ * resized in place.
  */
 bool atryrealloc(void *ptr, size_t oldsize, size_t newsize);
 

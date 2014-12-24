@@ -10,7 +10,7 @@
  * Concurrent Queue Algorithms," PODC 1996.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -37,16 +37,16 @@
  */
 struct aqueue_node {
 	struct arcp_region;
-	arcp_t next; /**< the next item in the queue */
-	arcp_t item; /**< the content of this node */
+	arcp_t next;		/**< the next item in the queue */
+	arcp_t item;		/**< the content of this node */
 };
 
 /**
  * Atomic Queue.
  */
 typedef struct {
-	arcp_t head; /**< the first item in the queue */
-	arcp_t tail; /**< the last item in the queue */
+	arcp_t head;		/**< the first item in the queue */
+	arcp_t tail;		/**< the last item in the queue */
 } aqueue_t;
 
 /**

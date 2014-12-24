@@ -13,7 +13,7 @@
  * no longer needed.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -56,13 +56,14 @@ typedef void (*arcp_destroy_f)(struct arcp_region *);
  */
 typedef union {
 	struct {
-		unsigned int destroy_lock:1; /**< Lock during attempted
-					      *   destruction */
-		int storecount:15; /**< Number of pointers referencing
-		                    *   this */
-		int16_t usecount; /**< Number of checked out references */
-	} v; /**< value */
-	uint_least32_t p; /**< pun */
+		unsigned int destroy_lock:1;	/**< Lock during attempted
+						 *   destruction */
+		int storecount:15;		/**< Number of pointers
+						 *   referencing this */
+		int16_t usecount;		/**< Number of checked out
+						 *   references */
+	} v;					/**< value */
+	uint_least32_t p;			/**< pun */
 } arcp_refcount_t;
 
 /**
@@ -75,10 +76,14 @@ typedef union {
  * pointers.
  */
 struct arcp_region {
-	arcp_destroy_f destroy; /**< Pointer to a destruction function. */
-	atomic_uint_least32_t refcount; /**< References to this region. */
-	arcp_t weakref; /**< Pointer to the weak reference for this
-			 *   region; initially NULL. */
+	arcp_destroy_f destroy;			/**< Pointer to a destruction
+						 *   function. */
+	atomic_uint_least32_t refcount;		/**< References to this
+						 *   region. */
+	arcp_t weakref;				/**< Pointer to the weak
+						 *   reference for this
+						 *   region; initially
+						 *   NULL. */
 };
 
 /**
@@ -90,7 +95,8 @@ struct arcp_region {
  */
 struct arcp_weakref {
 	struct arcp_region;
-	arcp_t target; /**< The arcp_region to which this is a reference. */
+	arcp_t target;				/**< The arcp_region to which
+						 *   this is a reference. */
 };
 
 /**
@@ -109,18 +115,18 @@ struct arcp_weakref {
 #define __ARCP_PTR2COUNT(ptr) (((uintptr_t) (ptr)) & __ARCP_COUNTMASK)
 
 /* Sets the count for a given pointer. */
-#define __ARCP_PTRSETCOUNT(ptr, count)	 				\
-	((struct arcp_region *) 					\
+#define __ARCP_PTRSETCOUNT(ptr, count)					\
+	((struct arcp_region *)						\
 	 ((((uintptr_t) (ptr)) & ~__ARCP_COUNTMASK) | ((uintptr_t) (count))))
 
 /* Increments the count for a given pointer. */
-#define __ARCP_PTRINC(ptr)	 					\
-	((struct arcp_region *) 					\
+#define __ARCP_PTRINC(ptr)						\
+	((struct arcp_region *)						\
 	 (((uintptr_t) (ptr)) + 1))
 
 /* Decrements the count for a given pointer. */
-#define __ARCP_PTRDEC(ptr)	 					\
-	((struct arcp_region *) 					\
+#define __ARCP_PTRDEC(ptr)						\
+	((struct arcp_region *)						\
 	 (((uintptr_t) (ptr)) - 1))
 
 /* Separates the pointer from the count */
@@ -137,15 +143,15 @@ struct arcp_weakref {
 #define __ARCP_REFCOUNT_INIT(scount, ucount)				\
 	(((arcp_refcount_t)						\
 	  { .v = { .destroy_lock = 0,					\
-	           .storecount = (scount),				\
-	           .usecount = (ucount) }}).p)
+		   .storecount = (scount),				\
+		  .usecount = (ucount) }}).p)
 
 /**
  * Initialization value for `struct arcp_region`.
  */
 #define ARCP_REGION_VAR_INIT(storecount, usecount, destroy, weakref)	\
 	{ destroy, ATOMIC_VAR_INIT(__ARCP_REFCOUNT_INIT((storecount),	\
-	                                                (usecount))),	\
+							(usecount))),	\
 	  ARCP_VAR_INIT(weakref) }
 
 /**
@@ -248,8 +254,8 @@ struct arcp_weakref *arcp_weakref(struct arcp_region *region);
  *
  * @returns a weak reference to this region.
  */
-static inline struct arcp_weakref *
-arcp_weakref_phantom(struct arcp_region *region);
+static inline struct arcp_weakref *arcp_weakref_phantom(
+	struct arcp_region *region);
 
 /**
  * Releases a reference to a reference counted region.
@@ -372,7 +378,7 @@ struct arcp_region *arcp_swap(arcp_t *rcp, struct arcp_region *region);
  * @returns a strong reference to the old contents of rcp, or NULL on error.
  */
 struct arcp_region *arcp_exchange_weak(arcp_t *rcp,
-                                       struct arcp_region *region);
+				       struct arcp_region *region);
 
 /**
  * Compare the content of the reference counted pointer with `oldregion`, and
@@ -392,7 +398,7 @@ struct arcp_region *arcp_exchange_weak(arcp_t *rcp,
  * @returns true if set to newregion, false otherwise.
  */
 bool arcp_cas(arcp_t *rcp, struct arcp_region *oldregion,
-              struct arcp_region *newregion);
+	      struct arcp_region *newregion);
 
 /**
  * Compare the content of the reference counted pointer with `oldregion`, and
@@ -408,7 +414,7 @@ bool arcp_cas(arcp_t *rcp, struct arcp_region *oldregion,
  * @returns true if set to newregion, false otherwise.
  */
 bool arcp_cas_release(arcp_t *rcp, struct arcp_region *oldregion,
-                      struct arcp_region *newregion);
+		      struct arcp_region *newregion);
 
 /**
  * Get the number of checked out references to the region.
@@ -446,8 +452,8 @@ static inline int arcp_storecount(struct arcp_region *region) {
 static inline struct arcp_weakref *
 arcp_weakref_phantom(struct arcp_region *region) {
 	return region == NULL ? NULL
-		: (struct arcp_weakref *) __ARCP_PTRDECOUNT(
-				ak_load(&region->weakref, mo_acquire));
+			      : (struct arcp_weakref *) __ARCP_PTRDECOUNT(
+				      ak_load(&region->weakref, mo_acquire));
 }
 
 /**

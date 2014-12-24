@@ -1,14 +1,14 @@
 /** @file float.h
  * Atomic Floats
  *
- * C11-like atomic functions for floating point numbers.  These should
- * be usable just like the corresponding C11 atomic functions, with
+ * C11-like atomic functions for floating point numbers.  These should be
+ * usable just like the corresponding C11 atomic functions, with
  * `volatile atomic_float *` and such substituted for the usual
- * `volatile <atomic type> *`.  Atomic add and subtract are not
- * included since these would not be generically possible without locks.
+ * `volatile <atomic type> *`.  Atomic add and subtract are not included since
+ * these would not be generically possible without locks.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -31,16 +31,16 @@
 #include <stdint.h>
 #include <atomickit/atomic.h>
 
-typedef _Atomic(uint32_t) atomic_float;
-typedef _Atomic(uint64_t) atomic_double;
+typedef _Atomic(uint32_t)	atomic_float;
+typedef _Atomic(uint64_t)	atomic_double;
 
-#define atomic_float_is_lock_free(obj) atomic_is_lock_free(obj)
-#define atomic_double_is_lock_free(obj) atomic_is_lock_free(obj)
+#define ak_float_is_nb(obj)	atomic_is_lock_free(obj)
+#define ak_double_is_nb(obj)	atomic_is_lock_free(obj)
 
 #define __AK_CANONICALF(f)						\
 	(unlikely(isnanf(f)) ? NAN : ((f) == 0.0f ? 0.0f : (f)))
 
-#define __AK_CANONICALD(d)					\
+#define __AK_CANONICALD(d)						\
 	(unlikely(isnan(d)) ? ((double) NAN) : ((d) == 0.0 ? 0.0 : (d)))
 
 #define __AK_FLOAT2INT(f)						\
@@ -63,11 +63,11 @@ typedef _Atomic(uint64_t) atomic_double;
 
 #define ak_float_store(object, desired, order)				\
 	ak_store((object), __AK_FLOAT2INT(__AK_CANONICALF(desired)),	\
-	         (order))
+		 (order))
 
 #define ak_double_store(object, desired, order)				\
 	ak_store((object), __AK_DOUBLE2INT(__AK_CANONICALD(desired)),	\
-	         (order))
+		 (order))
 
 #define ak_float_load(object, order)					\
 	__AK_INT2FLOAT(ak_load((object), (order)))
@@ -77,42 +77,48 @@ typedef _Atomic(uint64_t) atomic_double;
 
 #define ak_float_swap(object, desired, order)				\
 	__AK_INT2FLOAT(ak_swap((object),				\
-	                       __AK_FLOAT2INT(__AK_CANONICALF(desired)), \
-	                       (order)))
+		       __AK_FLOAT2INT(__AK_CANONICALF(desired)),	\
+		       (order)))
 
 #define ak_double_swap(object, desired, order)				\
 	__AK_INT2DOUBLE(ak_swap((object),				\
-	                        __AK_DOUBLE2INT(__AK_CANONICALD(desired)), \
-	                        (order)))
+				__AK_DOUBLE2INT(__AK_CANONICALD(desired)), \
+				(order)))
 
 #define ak_float_cas(object, expected, desired, success, failure) ({	\
-	*(expected) = __AK_CANONICALF(*(expected));			\
-	ak_cas((object), ((uint32_t *) (expected)),			\
-	       __AK_FLOAT2INT(__AK_CANONICALF(desired)),		\
-	       (success), (failure));					\
-})
+		*(expected) = __AK_CANONICALF(*(expected));		\
+		ak_cas((object), ((uint32_t *) (expected)),		\
+		       __AK_FLOAT2INT(__AK_CANONICALF(desired)),	\
+		       (success), (failure));				\
+	})
 
 #define ak_double_cas(object, expected, desired, success, failure) ({	\
-	*(expected) = __AK_CANONICALD(*(expected));			\
-	ak_cas((object), (uint64_t *) (expected),			\
-	       __AK_DOUBLE2INT(__AK_CANONICALD(desired)),		\
-	       (success), (failure));					\
-})
+		*(expected) = __AK_CANONICALD(*(expected));		\
+		ak_cas((object), (uint64_t *) (expected),		\
+		       __AK_DOUBLE2INT(__AK_CANONICALD(desired)),	\
+		       (success), (failure));				\
+	})
 
 #define ak_float_cas_strong(object, expected, desired,			\
                             success, failure) ({			\
-	*(expected) = __AK_CANONICALF(*(expected));			\
-	ak_cas_strong((object), (uint32_t *) (expected),		\
-	              __AK_FLOAT2INT(__AK_CANONICALF(desired)),		\
-	              (success), (failure));				\
-})
+		*(expected) = __AK_CANONICALF(*(expected));		\
+		ak_cas_strong((object), (uint32_t *) (expected),	\
+			      __AK_FLOAT2INT(__AK_CANONICALF(desired)),	\
+			      (success), (failure));			\
+	})
 
-#define ak_double_cas_strong(object, expected, desired,			\
-                             success, failure) ({			\
-	*(expected) = __AK_CANONICALD(*(expected));			\
-	ak_cas_strong((object), (uint64_t *) (expected),		\
-	              __AK_DOUBLE2INT(__AK_CANONICALD(desired)),	\
-	              (success), (failure));				\
-})
+#define ak_double_cas_strong(object, expected, desired,			 \
+                             success, failure) ({			 \
+		*(expected) = __AK_CANONICALD(*(expected));		 \
+		ak_cas_strong((object), (uint64_t *) (expected),	 \
+			      __AK_DOUBLE2INT(__AK_CANONICALD(desired)), \
+			      (success), (failure));			 \
+	})
+
+#define AK_FLOAT_VAR_INIT(f)						\
+	ATOMIC_VAR_INIT(__AK_FLOAT2INT(__AK_CANONICALF(f)))
+
+#define AK_DOUBLE_VAR_INIT(f)						\
+	ATOMIC_VAR_INIT(__AK_DOUBLE2INT(__AK_CANONICALD(f)))
 
 #endif /* ATOMICKIT_FLOAT_H */

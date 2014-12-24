@@ -1,21 +1,21 @@
 /*
  * string.c
  * 
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
- * Atomic Kit is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published
- * by the Free Software Foundation, version 2.
+ * Atomic Kit is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation, version 2.
  * 
- * Atomic Kit is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
+ * Atomic Kit is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
  * 
- * You should have received a copy of the GNU General Public License
- * along with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along
+ * with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <stddef.h>
@@ -30,7 +30,8 @@ struct astrstr {
 	char data_start[];
 };
 
-void astr_init(struct astr *str, size_t len, char *data, void (*destroy)(struct astr *)) {
+void astr_init(struct astr *str, size_t len, char *data,
+	       void (*destroy)(struct astr *)) {
 	arcp_region_init(str, (void (*)(struct arcp_region *)) destroy);
 	str->len = len;
 	str->data = data;
@@ -47,7 +48,7 @@ static void __astr_destroy(struct astr *str) {
 struct astr *astr_create(size_t len, char *data) {
 	struct astr *str;
 	str = amalloc(sizeof(struct astr));
-	if(str == NULL) {
+	if (str == NULL) {
 		return NULL;
 	}
 
@@ -58,7 +59,7 @@ struct astr *astr_create(size_t len, char *data) {
 struct astr *astr_alloc(size_t len) {
 	struct astrstr *str;
 	str = amalloc(sizeof(struct astrstr) + len + 1);
-	if(str == NULL) {
+	if (str == NULL) {
 		return NULL;
 	}
 
@@ -75,7 +76,7 @@ struct astr *astr_cstrdup(char *cstr) {
 	struct astr *rstr;
 	len = strlen(cstr);
 	rstr = astr_alloc(len);
-	if(rstr == NULL) {
+	if (rstr == NULL) {
 		return NULL;
 	}
 
@@ -88,7 +89,7 @@ struct astr *astr_cstrdup(char *cstr) {
 struct astr *astr_dup(struct astr *str) {
 	struct astr *rstr;
 	rstr = astr_alloc(str->len);
-	if(rstr == NULL) {
+	if (rstr == NULL) {
 		return NULL;
 	}
 
@@ -129,7 +130,7 @@ struct astr *astr_cstrcat(struct astr *str1, char *str2) {
 struct astr *astr_chr(struct astr *str, char chr) {
 	char *rdata;
 	rdata = memchr(str->data, chr, str->len);
-	if(rdata == NULL) {
+	if (rdata == NULL) {
 		return NULL;
 	}
 
@@ -139,7 +140,7 @@ struct astr *astr_chr(struct astr *str, char chr) {
 struct astr *astr_rchr(struct astr *str, char chr) {
 	char *rdata;
 	rdata = memrchr(str->data, chr, str->len);
-	if(rdata == NULL) {
+	if (rdata == NULL) {
 		return NULL;
 	}
 
@@ -148,34 +149,41 @@ struct astr *astr_rchr(struct astr *str, char chr) {
 
 struct astr *astr_str(struct astr *haystack, struct astr *needle) {
 	char *rdata;
-	rdata = memmem(haystack->data, haystack->len, needle->data, needle->len);
-	if(rdata == NULL) {
+	rdata = memmem(haystack->data, haystack->len,
+		       needle->data, needle->len);
+	if (rdata == NULL) {
 		return NULL;
 	}
 
-	return astr_create(haystack->len - ((size_t) (rdata - haystack->data)), rdata); 
+	return astr_create(haystack->len
+			   - ((size_t) (rdata - haystack->data)),
+			   rdata); 
 }
 
 struct astr *astr_cstrstr(struct astr *haystack, char *needle) {
 	char *rdata;
 	rdata = memmem(haystack->data, haystack->len, needle, strlen(needle));
-	if(rdata == NULL) {
+	if (rdata == NULL) {
 		return NULL;
 	}
 
-	return astr_create(haystack->len - ((size_t) (rdata - haystack->data)), rdata); 
+	return astr_create(haystack->len
+			   - ((size_t) (rdata - haystack->data)),
+			   rdata); 
 }
 
 struct astr *astr_rstr(struct astr *haystack, struct astr *needle) {
 	size_t last;
 	size_t i;
-	if(haystack->len < needle->len) {
+	if (haystack->len < needle->len) {
 		return NULL;
 	}
 	last = haystack->len - needle->len;
-	for(i = last; i <= last; i--) {
-		if(memcmp(haystack->data + i, needle->data, needle->len) == 0) {
-			return astr_create(haystack->len - i, haystack->data + i);
+	for (i = last; i <= last; i--) {
+		if (memcmp(haystack->data + i, needle->data, needle->len)
+		    == 0) {
+			return astr_create(haystack->len - i,
+					   haystack->data + i);
 		}
 	}
 	return NULL;
@@ -186,13 +194,14 @@ struct astr *astr_cstrrstr(struct astr *haystack, char *needle) {
 	size_t i;
 	size_t needle_len;
 	needle_len = strlen(needle);
-	if(haystack->len < needle_len) {
+	if (haystack->len < needle_len) {
 		return NULL;
 	}
 	last = haystack->len - needle_len;
-	for(i = last; i <= last; i--) {
-		if(memcmp(haystack->data + i, needle, needle_len) == 0) {
-			return astr_create(haystack->len - i, haystack->data + i);
+	for (i = last; i <= last; i--) {
+		if (memcmp(haystack->data + i, needle, needle_len) == 0) {
+			return astr_create(haystack->len - i,
+					   haystack->data + i);
 		}
 	}
 	return NULL;
@@ -200,10 +209,10 @@ struct astr *astr_cstrrstr(struct astr *haystack, char *needle) {
 
 int astr_cmp(struct astr *a, struct astr *b) {
 	int r;
-	if(a->len > b->len) {
+	if (a->len > b->len) {
 		r = memcmp(a->data, b->data, b->len);
 		return r == 0 ? 1 : r;
-	} else if(a->len < b->len) {
+	} else if (a->len < b->len) {
 		r = memcmp(a->data, b->data, a->len);
 		return r == 0 ? -1 : r;
 	} else {

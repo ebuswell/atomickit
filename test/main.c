@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  *
  * This file is part of Atomic Kit.
  * 
@@ -21,49 +21,51 @@
 #include "test.h"
 #include "alltests.h"
 
-int main(int argc __attribute__((unused)), char **argv __attribute__((unused))) {
-    int r;
+int
+main(int argc __attribute__((unused)),
+     char **argv __attribute__((unused))) {
+	int r;
 
-    test_config_nofork();
+	// test_config_nofork();
 
-    r = run_atomic_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = run_float_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = run_rcp_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = run_queue_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = run_malloc_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = run_array_h_test_suite();
-    if(r != 0) {
-	fprintf(stderr, "Failed to run tests");
-	exit(EXIT_FAILURE);
-    }
-    r = print_test_results();
-    if(r != 0) {
-    	fprintf(stderr, "Failed to print test results");
-    	exit(EXIT_FAILURE);
-    }
-    if(tests_succeeded()) {
-	exit(EXIT_SUCCESS);
-    } else {
-	exit(EXIT_FAILURE);
-    }
+	r = run_atomic_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = run_float_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = run_rcp_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = run_queue_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = run_malloc_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = run_array_h_test_suite();
+	if (r != 0) {
+		fprintf(stderr, "Failed to run tests");
+		exit(EXIT_FAILURE);
+	}
+	r = print_test_results();
+	if (r != 0) {
+		fprintf(stderr, "Failed to print test results");
+		exit(EXIT_FAILURE);
+	}
+	if (tests_succeeded()) {
+		exit(EXIT_SUCCESS);
+	} else {
+		exit(EXIT_FAILURE);
+	}
 }

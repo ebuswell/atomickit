@@ -1,7 +1,7 @@
 /*
  * dict.c
  *
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -27,8 +27,9 @@
 
 static void adict_destroy(struct adict *dict) {
 	size_t i;
+
 	/* release each key and value */
-	for(i = 0; i < dict->len; i++) {
+	for (i = 0; i < dict->len; i++) {
 		arcp_release(dict->items[i].key);
 		arcp_release(dict->items[i].value);
 	}
@@ -39,13 +40,14 @@ static void adict_destroy(struct adict *dict) {
 struct adict *adict_dup(struct adict *dict) {
 	struct adict *ret;
 	size_t i;
+
 	/* try to allocate memory for the duplicate dictionary */
 	ret = amalloc(ADICT_SIZE(dict->len));
-	if(ret == NULL) {
+	if (ret == NULL) {
 		return NULL;
 	}
 	/* acquire values and copy them to the new dictionary */
-	for(i = 0; i < dict->len; i++) {
+	for (i = 0; i < dict->len; i++) {
 		ret->items[i].key = arcp_acquire(dict->items[i].key);
 		ret->items[i].value = arcp_acquire(dict->items[i].value);
 	}
@@ -59,7 +61,7 @@ struct adict *adict_create() {
 	struct adict *ret;
 	/* try to allocate memory for the dictionary */
 	ret = amalloc(ADICT_OVERHEAD);
-	if(ret == NULL) {
+	if (ret == NULL) {
 		return NULL;
 	}
 	/* set up dictionary */
@@ -75,24 +77,24 @@ struct adict *adict_create() {
  * retidx - this will be set to the index at which the key was found, or if
  * the key was not found, the place at which the key should be put to keep the
  * dictionary sorted */
-#define IF_BSEARCH(list, nitems, key, retidx) do {		\
-	size_t __l; /* lower limit */				\
-	size_t __u; /* upper limit */				\
-	(retidx) = __l = 0;					\
-	__u = (nitems);						\
-	while(__l < __u) {					\
-		int __r;					\
-		(retidx) = (__l + __u) / 2;			\
-		__r = astr_cmp((key), (list)[retidx].key);	\
-		if(__r < 0) {					\
-			__u = (retidx);				\
-		} else if(__r > 0) {				\
-			__l = ++(retidx);			\
+#define IF_BSEARCH(list, nitems, key, retidx) do {			\
+	size_t __l;		/* lower limit */			\
+	size_t __u;		/* upper limit */			\
+	int __r;							\
+	(retidx) = __l = 0;						\
+	__u = (nitems);							\
+	while (__l < __u) {						\
+		(retidx) = (__l + __u) / 2;				\
+		__r = astr_cmp((key), (list)[retidx].key);		\
+		if (__r < 0) {						\
+			__u = (retidx);					\
+		} else if (__r > 0) {					\
+			__l = ++(retidx);				\
 		} else
 
-#define ENDIF_BSEARCH \
-	}             \
-} while(0)
+#define ENDIF_BSEARCH							\
+	}								\
+} while (0)
 
 /* IF_BSEARCHCSTR and ENDIF_BSEARCHCSTR macros for internal use.
  * These are the same as for IF_BSEARCH except that key is a cstr instead of
@@ -103,24 +105,24 @@ struct adict *adict_create() {
  * retidx - this will be set to the index at which the key was found, or if
  * the key was not found, the place at which the key should be put to keep the
  * dictionary sorted */
-#define IF_BSEARCHCSTR(list, nitems, key, retidx) do {		\
-	size_t __l; /* lower limit */				\
-	size_t __u; /* upper limit */				\
-	(retidx) = __l = 0;					\
-	__u = (nitems);						\
-	while(__l < __u) {					\
-		int __r;					\
-		(retidx) = (__l + __u) / 2;			\
-		__r = astr_cstrcmp((list)[retidx].key, (key));	\
-		if(__r > 0) {					\
-			__u = (retidx);				\
-		} else if(__r < 0) {				\
-			__l = ++(retidx);			\
+#define IF_BSEARCHCSTR(list, nitems, key, retidx) do {			\
+	size_t __l;		/* lower limit */			\
+	size_t __u;		/* upper limit */			\
+	int __r;							\
+	(retidx) = __l = 0;						\
+	__u = (nitems);							\
+	while (__l < __u) {						\
+		(retidx) = (__l + __u) / 2;				\
+		__r = astr_cstrcmp((list)[retidx].key, (key));		\
+		if (__r > 0) {						\
+			__u = (retidx);					\
+		} else if (__r < 0) {					\
+			__l = ++(retidx);				\
 		} else
 
-#define ENDIF_BSEARCHCSTR \
-	}                 \
-} while(0)
+#define ENDIF_BSEARCHCSTR						\
+	}								\
+} while (0)
 
 struct arcp_region *adict_get(struct adict *dict, struct astr *key) {
 	size_t i;
@@ -177,7 +179,7 @@ bool adict_cstrhas(struct adict *dict, char *key) {
 }
 
 struct adict *adict_put(struct adict *dict, struct astr *key,
-                        struct arcp_region *value) {
+			struct arcp_region *value) {
 	size_t i;
 	size_t len;
 	len = dict->len;
@@ -189,13 +191,13 @@ struct adict *adict_put(struct adict *dict, struct astr *key,
 		return dict;
 	} ENDIF_BSEARCH;
 	/* key is not present, add new entry; reallocate in place or
- 	 * allocate and copy */
-	if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
+	 * allocate and copy */
+	if (atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
 		memmove(&dict->items[i + 1], &dict->items[i],
-		        sizeof(struct adict_entry) * (len - i));
+			sizeof(struct adict_entry) * (len - i));
 	} else {
 		struct adict *new_dict = amalloc(ADICT_SIZE(len + 1));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			return NULL;
 		}
 		memcpy(new_dict, dict, ADICT_SIZE(i));
@@ -213,28 +215,28 @@ struct adict *adict_put(struct adict *dict, struct astr *key,
 }
 
 struct adict *adict_dup_put(struct adict *dict, struct astr *key,
-                            struct arcp_region *value) {
+			    struct arcp_region *value) {
 	size_t i, j;
-	struct adict *new_dict;
 	size_t len;
+	struct adict *new_dict;
 	len = dict->len;
 	/* search for key */
 	IF_BSEARCH(dict->items, len, key, i) {
 		/* key is present */
 		/* allocate memory for the new dictionary */
 		new_dict = amalloc(ADICT_SIZE(len));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			return NULL;
 		}
 		/* acquire items and copy them over, leaving a hole for the
- 		 * new value. */
-		for(j = 0; j < i; j++) {
+		 * new value. */
+		for (j = 0; j < i; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
 				arcp_acquire(dict->items[j].value);
 		}
-		for(j++; j < len; j++) {
+		for (j++; j < len; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
@@ -247,16 +249,16 @@ struct adict *adict_dup_put(struct adict *dict, struct astr *key,
 	/* key is not present; insert new key at i */
 	/* allocate memory for the new dictionary */
 	new_dict = amalloc(ADICT_SIZE(dict->len + 1));
-	if(new_dict == NULL) {
+	if (new_dict == NULL) {
 		return NULL;
 	}
 	/* acquire items and copy them over, leaving a hole for the new
- 	 * value */
-	for(j = 0; j < i; j++) {
+	 * value */
+	for (j = 0; j < i; j++) {
 		new_dict->items[j].key = arcp_acquire(dict->items[j].key);
 		new_dict->items[j].value = arcp_acquire(dict->items[j].value);
 	}
-	for(; j < len; j++) {
+	for (; j < len; j++) {
 		new_dict->items[j].key = arcp_acquire(dict->items[j].key);
 		new_dict->items[j].value = arcp_acquire(dict->items[j].value);
 	}
@@ -272,7 +274,7 @@ set:
 }
 
 struct adict *adict_cstrput(struct adict *dict, char *key,
-                            struct arcp_region *value) {
+			    struct arcp_region *value) {
 	size_t i;
 	size_t len;
 	len = dict->len;
@@ -287,22 +289,22 @@ struct adict *adict_cstrput(struct adict *dict, char *key,
 		/* key is not present, insert key at i */
 		/* create a new key to be stored here */
 		struct astr *astrkey = astr_cstrdup(key);
-		if(astrkey == NULL) {
+		if (astrkey == NULL) {
 			return NULL;
 		}
 		/* reallocate in place or allocate and copy */
-		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
+		if (atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len + 1))) {
 			memmove(&dict->items[i + 1], &dict->items[i],
-		        	sizeof(struct adict_entry) * (len - i));
+				sizeof(struct adict_entry) * (len - i));
 		} else {
 			struct adict *new_dict = amalloc(ADICT_SIZE(len + 1));
-			if(new_dict == NULL) {
+			if (new_dict == NULL) {
 				arcp_release(astrkey);
 				return NULL;
 			}
 			memcpy(new_dict, dict, ADICT_SIZE(i));
 			memcpy(&new_dict->items[i + 1], &dict->items[i],
-		       	       sizeof(struct adict_entry) * (len - i));
+			       sizeof(struct adict_entry) * (len - i));
 			afree(dict, ADICT_SIZE(len));
 			dict = new_dict;
 		}
@@ -316,7 +318,7 @@ struct adict *adict_cstrput(struct adict *dict, char *key,
 }
 
 struct adict *adict_dup_cstrput(struct adict *dict, char *key,
-                                struct arcp_region *value) {
+				struct arcp_region *value) {
 	size_t i, j;
 	struct adict *new_dict;
 	size_t len;
@@ -326,17 +328,17 @@ struct adict *adict_dup_cstrput(struct adict *dict, char *key,
 		/* key present, duplicate and set key entry to value */
 		/* allocate new dictionary */
 		new_dict = amalloc(ADICT_SIZE(len));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			return NULL;
 		}
 		/* acquire items and copy them over */
-		for(j = 0; j < i; j++) {
+		for (j = 0; j < i; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
 				arcp_acquire(dict->items[j].value);
 		}
-		for(j++; j < len; j++) {
+		for (j++; j < len; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
@@ -352,24 +354,24 @@ struct adict *adict_dup_cstrput(struct adict *dict, char *key,
 		/* key not present, insert key at i */
 		/* create the key */
 		struct astr *astrkey = astr_cstrdup(key);
-		if(astrkey == NULL) {
+		if (astrkey == NULL) {
 			return NULL;
 		}
 		/* allocate new dictionary */
 		new_dict = amalloc(ADICT_SIZE(dict->len + 1));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			arcp_release(astrkey);
 			return NULL;
 		}
 		/* acquire items and copy them over, leaving a hole for the
- 		 * new value */
-		for(j = 0; j < i; j++) {
+		 * new value */
+		for (j = 0; j < i; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
 				arcp_acquire(dict->items[j].value);
 		}
-		for(; j < len; j++) {
+		for (; j < len; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
@@ -388,12 +390,11 @@ set:
 	return new_dict;
 }
 
-struct adict *adict_create_put(struct astr *key,
-                               struct arcp_region *value) {
+struct adict *adict_create_put(struct astr *key, struct arcp_region *value) {
 	struct adict *new_dict;
 	/* allocate memory for the new dictionary */
 	new_dict = amalloc(ADICT_SIZE(1));
-	if(new_dict == NULL) {
+	if (new_dict == NULL) {
 		return NULL;
 	}
 	/* acquire passed-in key and value */
@@ -405,12 +406,11 @@ struct adict *adict_create_put(struct astr *key,
 	return new_dict;
 }
 
-struct adict *adict_create_cstrput(char *key,
-                                   struct arcp_region *value) {
+struct adict *adict_create_cstrput(char *key, struct arcp_region *value) {
 	struct adict *new_dict;
 	struct astr *astrkey;
 	astrkey = astr_cstrdup(key);
-	if(astrkey == NULL) {
+	if (astrkey == NULL) {
 		return NULL;
 	}
 	new_dict = adict_create_put(astrkey, value);
@@ -428,26 +428,26 @@ struct adict *adict_del(struct adict *dict, struct astr *key) {
 	/* search for key */
 	IF_BSEARCH(dict->items, len, key, i) {
 		/* store key and value to release only after completing the
- 		 * deletion */
+		 * deletion */
 		deleted.key = dict->items[i].key;
 		deleted.value = dict->items[i].value;
 		/* store last value as it's always deleted */
 		last.key = dict->items[len - 1].key;
 		last.value = dict->items[len - 1].value;
 		/* reallocate or copy */
-		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
-			if(deleted.key != last.key) {
+		if (atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
+			if (deleted.key != last.key) {
 				memmove(&dict->items[i],
-				        &dict->items[i + 1],
-			                sizeof(struct adict_entry)
-				        * ((len - 1) - (i + 1)));
+					&dict->items[i + 1],
+					sizeof(struct adict_entry)
+					* ((len - 1) - (i + 1)));
 				dict->items[len - 2].key = last.key;
 				dict->items[len - 2].value = last.value;
 			}
 		} else {
 			struct adict *new_dict;
 			new_dict = amalloc(ADICT_SIZE(len - 1));
-			if(new_dict == NULL) {
+			if (new_dict == NULL) {
 				return NULL;
 			}
 			memcpy(new_dict, dict, ADICT_SIZE(i));
@@ -477,18 +477,18 @@ struct adict *adict_dup_del(struct adict *dict, struct astr *key) {
 	IF_BSEARCH(dict->items, len, key, i) {
 		/* allocate new dictionary */
 		new_dict = amalloc(ADICT_SIZE(len - 1));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			return NULL;
 		}
 		/* acquire items and copy them over, leaving out the deleted
- 		 * value */
-		for(j = 0; j < i; j++) {
+		 * value */
+		for (j = 0; j < i; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
 				arcp_acquire(dict->items[j].value);
 		}
-		for(; j + 1 < len; j++) {
+		for (; j + 1 < len; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j + 1].key);
 			new_dict->items[j].value =
@@ -514,26 +514,26 @@ struct adict *adict_cstrdel(struct adict *dict, char *key) {
 	/* search for key */
 	IF_BSEARCHCSTR(dict->items, len, key, i) {
 		/* store key and value to release only after completing the
- 		 * deletion */
+		 * deletion */
 		deleted.key = dict->items[i].key;
 		deleted.value = dict->items[i].value;
 		/* store last value as it's always deleted */
 		last.key = dict->items[len - 1].key;
 		last.value = dict->items[len - 1].value;
 		/* reallocate or copy */
-		if(atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
-			if(deleted.key != last.key) {
+		if (atryrealloc(dict, ADICT_SIZE(len), ADICT_SIZE(len - 1))) {
+			if (deleted.key != last.key) {
 				memmove(&dict->items[i],
-				        &dict->items[i + 1],
-			                sizeof(struct adict_entry)
-				        * ((len - 1) - (i + 1)));
+					&dict->items[i + 1],
+					sizeof(struct adict_entry)
+					* ((len - 1) - (i + 1)));
 				dict->items[len - 2].key = last.key;
 				dict->items[len - 2].value = last.value;
 			}
 		} else {
 			struct adict *new_dict;
 			new_dict = amalloc(ADICT_SIZE(len - 1));
-			if(new_dict == NULL) {
+			if (new_dict == NULL) {
 				return NULL;
 			}
 			memcpy(new_dict, dict, ADICT_SIZE(i));
@@ -563,18 +563,18 @@ struct adict *adict_dup_cstrdel(struct adict *dict, char *key) {
 	IF_BSEARCHCSTR(dict->items, len, key, i) {
 		/* allocate new dictionary */
 		new_dict = amalloc(ADICT_SIZE(len - 1));
-		if(new_dict == NULL) {
+		if (new_dict == NULL) {
 			return NULL;
 		}
 		/* acquire items and copy them over, leaving out the deleted
- 		 * value */
-		for(j = 0; j < i; j++) {
+		 * value */
+		for (j = 0; j < i; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j].key);
 			new_dict->items[j].value =
 				arcp_acquire(dict->items[j].value);
 		}
-		for(; j + 1 < len; j++) {
+		for (; j + 1 < len; j++) {
 			new_dict->items[j].key =
 				arcp_acquire(dict->items[j + 1].key);
 			new_dict->items[j].value =

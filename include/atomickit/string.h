@@ -4,7 +4,7 @@
  * An immutable string suitable for use with Atomic Kit.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -33,8 +33,8 @@
  */
 struct astr {
 	struct arcp_region;
-	size_t len; /**< the number of bytes in the string data */
-	char *data; /**< a pointer to the string data */
+	size_t len;		/**< the number of bytes in the string data */
+	char *data;		/**< a pointer to the string data */
 };
 
 /**
@@ -51,7 +51,7 @@ typedef void (*astr_destroy_f)(struct astr *);
  * @param destroy the destruction function for this astr.
  */
 void astr_init(struct astr *str, size_t len, char *data,
-               astr_destroy_f destroy);
+	       astr_destroy_f destroy);
 
 /**
  * Create a new string using the specified data.
@@ -92,8 +92,8 @@ struct astr *astr_cstrwrap(char *cstr);
  *
  * @param str the string to duplicate
  *
- * @returns a pointer to the duplicated string, or NULL if the string could not
- * be duplicated.
+ * @returns a pointer to the duplicated string, or NULL if the string could
+ * not be duplicated.
  */
 struct astr *astr_dup(struct astr *str);
 
@@ -119,7 +119,8 @@ static inline size_t astr_len(struct astr *str) {
 }
 
 /**
- * Copy the source to the destination string, overwriting the destination string.
+ * Copy the source to the destination string, overwriting the destination
+ * string.
  *
  * @param dest the destination string.
  * @param src the source string.
@@ -129,7 +130,8 @@ static inline size_t astr_len(struct astr *str) {
 struct astr *astr_cpy(struct astr *dest, struct astr *src);
 
 /**
- * Copy the C string to the destination string, overwriting the destination string.
+ * Copy the C string to the destination string, overwriting the destination
+ * string.
  *
  * @param dest the destination string.
  * @param src the source C string.
@@ -186,8 +188,8 @@ struct astr *astr_rchr(struct astr *str, char chr);
  * @param haystack the string to search.
  * @param needle the string to search for.
  *
- * @returns a new string starting with the searched for string, or NULL if
- * the string is not found or there is an allocation error.
+ * @returns a new string starting with the searched for string, or NULL if the
+ * string is not found or there is an allocation error.
  */
 struct astr *astr_str(struct astr *haystack, struct astr *needle);
 
@@ -200,8 +202,8 @@ struct astr *astr_str(struct astr *haystack, struct astr *needle);
  * @param haystack the string to search.
  * @param needle the string to search for.
  *
- * @returns a new string starting with the searched for string, or NULL if
- * the string is not found or there is an allocation error.
+ * @returns a new string starting with the searched for string, or NULL if the
+ * string is not found or there is an allocation error.
  */
 struct astr *astr_rstr(struct astr *haystack, struct astr *needle);
 
@@ -211,8 +213,8 @@ struct astr *astr_rstr(struct astr *haystack, struct astr *needle);
  * @param haystack the string to search.
  * @param needle the C string to search for.
  *
- * @returns a new string starting with the searched for string, or NULL if
- * the string is not found or there is an allocation error.
+ * @returns a new string starting with the searched for string, or NULL if the
+ * string is not found or there is an allocation error.
  */
 struct astr *astr_cstrstr(struct astr *haystack, char *needle);
 
@@ -225,8 +227,8 @@ struct astr *astr_cstrstr(struct astr *haystack, char *needle);
  * @param haystack the string to search.
  * @param needle the C string to search for.
  *
- * @returns a new string starting with the searched for string, or NULL if
- * the string is not found or there is an allocation error.
+ * @returns a new string starting with the searched for string, or NULL if the
+ * string is not found or there is an allocation error.
  */
 struct astr *astr_cstrrstr(struct astr *haystack, char *needle);
 

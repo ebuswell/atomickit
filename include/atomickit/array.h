@@ -16,7 +16,7 @@
  * at all.
  */
 /*
- * Copyright 2012 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -45,8 +45,8 @@
  */
 struct aary {
 	struct arcp_region;
-	size_t len; /**< the length of the array */
-	struct arcp_region *items[]; /**< the array of items */
+	size_t len;			/**< the length of the array */
+	struct arcp_region *items[];	/**< the array of items */
 };
 
 /**
@@ -173,7 +173,7 @@ static inline struct arcp_region *aary_first_phantom(struct aary *array) {
  * @param region the region to store in the array.
  */
 static inline void aary_store(struct aary *array, size_t i,
-                              struct arcp_region *region) {
+			      struct arcp_region *region) {
 	arcp_release(array->items[i]);
 	array->items[i] = arcp_acquire(region);
 }
@@ -187,7 +187,7 @@ static inline void aary_store(struct aary *array, size_t i,
  * @param region the region to store in the array.
  */
 static inline void aary_storefirst(struct aary *array,
-                                   struct arcp_region *region) {
+				   struct arcp_region *region) {
 	arcp_release(array->items[0]);
 	array->items[0] = arcp_acquire(region);
 }
@@ -201,7 +201,7 @@ static inline void aary_storefirst(struct aary *array,
  * @param region the region to store in the array.
  */
 static inline void aary_storelast(struct aary *array,
-                                  struct arcp_region *region) {
+				  struct arcp_region *region) {
 	arcp_release(array->items[array->len - 1]);
 	array->items[array->len - 1] = arcp_acquire(region);
 }
@@ -219,7 +219,7 @@ static inline void aary_storelast(struct aary *array,
  * @returns the new array.
  */
 struct aary *aary_insert(struct aary *array, size_t i,
-                         struct arcp_region *region);
+			 struct arcp_region *region);
 
 /**
  * Duplicates the array and inserts the specified value at a specific index in
@@ -231,7 +231,7 @@ struct aary *aary_insert(struct aary *array, size_t i,
  * @returns the duplicated array.
  */
 struct aary *aary_dup_insert(struct aary *array, size_t i,
-                             struct arcp_region *region);
+			     struct arcp_region *region);
 
 /**
  * Removes the value at a specified index in the array, shifting values
@@ -317,7 +317,7 @@ struct aary *aary_prepend(struct aary *array, struct arcp_region *region);
  * @returns the duplicated array.
  */
 struct aary *aary_dup_prepend(struct aary *array,
-                              struct arcp_region *region);
+			      struct arcp_region *region);
 
 /**
  * Removes the value at the beginning of the array, shifting values downward
@@ -341,25 +341,25 @@ struct aary *aary_dup_shift(struct aary *array);
 
 /* array/range equivalents of above functions */
 /* struct aary *aary_storeary(struct aary *array1, size_t i,
- *                            struct aary *array2); */
+ * 			   struct aary *array2); */
 /* struct aary *aary_dup_storeary(struct aary *array1, size_t i,
- *                                struct aary *array2); */
+ * 			       struct aary *array2); */
 /* struct aary *aary_storeendary(struct aary *array1,
- *                               struct aary *array2); */
+ * 			      struct aary *array2); */
 /* struct aary *aary_dup_storeendary(struct aary *array1,
- *                                   struct aary *array2); */
+ * 				  struct aary *array2); */
 /* struct aary *aary_storestartary(struct aary *array1,
- *                                 struct aary *array2); */
+ * 				struct aary *array2); */
 /* struct aary *aary_dup_storestartary(struct aary *array1,
- *                                     struct aary *array2); */
+ * 				    struct aary *array2); */
 /* struct aary *aary_insertary(struct aary *array1, size_t i,
- *                             struct aary *array2); */
+ * 			    struct aary *array2); */
 /* struct aary *aary_dup_insertary(struct aary *array1, size_t i,
- *                                 struct aary *array2); */
+ * 				struct aary *array2); */
 /* struct aary *aary_removerange(struct aary *array1, size_t i,
- *                               size_t len); */
+ * 			      size_t len); */
 /* struct aary *aary_dup_removerange(struct aary *array1, size_t i,
- *                                   size_t len); */
+ * 				  size_t len); */
 /* struct aary *aary_poprange(struct aary *array1, size_t len); */
 /* struct aary *aary_dup_poprange(struct aary *array1, size_t len); */
 /* struct aary *aary_shiftrange(struct aary *array1, size_t len); */
@@ -392,7 +392,7 @@ void aary_sortx(struct aary *array);
  * equal to, or greater than the second.
  */
 void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *,
-                                                 const struct arcp_region *));
+						 const struct arcp_region *));
 
 /**
  * Sorts an array in-place via the specified function.
@@ -407,9 +407,9 @@ void aary_sort(struct aary *array, int (*compar)(const struct arcp_region *,
  * @param arg an arbitrary argument to pass to the comparison function.
  */
 void aary_sort_r(struct aary *array, int (*compar)(const struct arcp_region *,
-                                                   const struct arcp_region *,
-                                                   void *arg),
-                 void *arg);
+						   const struct arcp_region *,
+						   void *arg),
+		 void *arg);
 
 /**
  * Reverses the order of the elements of the array in-place.
@@ -438,7 +438,8 @@ void aary_reverse(struct aary *array);
 struct aary *aary_set_add(struct aary *array, struct arcp_region *region);
 
 /**
- * Duplicate the array and add the region to the duplicated array if it is not already present
+ * Duplicate the array and add the region to the duplicated array if it is not
+ * already present
  *
  * The array must be sorted by arcp_region pointer before calling this
  * function. The added item will be added such that the sorting of the array
@@ -494,22 +495,22 @@ struct aary *aary_dup_set_remove(struct aary *array,
  */
 bool aary_set_contains(struct aary *array, struct arcp_region *region);
 
-/* struct aary *aary_set_union(struct aary *array1,
- *                             struct aary *array2); */
+/* struct aary *aary_set_union(struct aary *array2,
+ * 			    struct aary *array2); */
 /* struct aary *aary_dup_set_union(struct aary *array1,
- *                                 struct aary *array2); */
+ * 				struct aary *array2); */
 /* struct aary *aary_set_intersection(struct aary *array1,
- *                                    struct aary *array2); */
+ * 				   struct aary *array2); */
 /* struct aary *aary_dup_set_intersection(struct aary *array1,
- *                                        struct aary *array2); */
+ * 				       struct aary *array2); */
 /* struct aary *aary_set_difference(struct aary *array1,
- *                                  struct aary *array2); */
+ * 				 struct aary *array2); */
 /* struct aary *aary_dup_set_difference(struct aary *array1,
- *                                      struct aary *array2); */
+ * 				     struct aary *array2); */
 /* struct aary *aary_set_disjunction(struct aary *array1,
- *                                   struct aary *array2); */
+ * 				  struct aary *array2); */
 /* struct aary *aary_dup_set_disjunction(struct aary *array1,
- *                                       struct aary *array2); */
+ * 				      struct aary *array2); */
 
 /**
  * Convenience alias for aary_equal

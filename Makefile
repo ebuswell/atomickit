@@ -27,8 +27,8 @@ VERSION=0.3
 SRCS=src/rcp.c src/queue.c src/malloc.c src/array.c src/string.c src/dict.c
 
 TESTSRCS=test/main.c test/test_array_h.c test/test_float_h.c \
-         test/test_atomic_h.c test/test_malloc_h.c \
-         test/test_queue_h.c test/test_rcp_h.c test/test.c
+	 test/test_atomic_h.c test/test_malloc_h.c \
+	 test/test_queue_h.c test/test_rcp_h.c test/test.c
 
 HEADERS=include/atomickit/atomic.h \
         include/atomickit/float.h \
@@ -41,7 +41,7 @@ HEADERS=include/atomickit/atomic.h \
         include/atomickit/string.h
 
 ARCHHEADERS=include/${ARCH}/atomickit/arch/atomic.h \
-            include/${ARCH}/atomickit/arch/misc.h
+	    include/${ARCH}/atomickit/arch/misc.h
 
 OBJS=${SRCS:.c=.o}
 PICOBJS=${SRCS:.c=.pic.o}
@@ -66,11 +66,11 @@ libatomickit.a: ${OBJS}
 
 unittest-shared: libatomickit.so ${TESTOBJS}
 	${CC} ${CFLAGS} ${LDFLAGS} -L`pwd` -Wl,-rpath,`pwd` \
-	      ${TESTOBJS} -latomickit -o unittest-shared
+	      ${TESTOBJS} -latomickit -lpthread -o unittest-shared
 
 unittest-static: libatomickit.a ${TESTOBJS}
 	${CC} ${CFLAGS} ${LDFLAGS} -static -L`pwd` \
-	      ${TESTOBJS} -latomickit -o unittest-static
+	      ${TESTOBJS} -latomickit -lpthread -o unittest-static
 
 atomickit.pc: atomickit.pc.in config.mk Makefile
 	sed -e 's!@prefix@!${PREFIX}!g' \
@@ -87,7 +87,7 @@ install-headers:
 	(umask 022; mkdir -p ${DESTDIR}${INCLUDEDIR}/atomickit/arch)
 	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit ${HEADERS}
 	install -m 644 -t ${DESTDIR}${INCLUDEDIR}/atomickit/arch \
-	        ${ARCHHEADERS}
+		${ARCHHEADERS}
 
 install-pkgconfig: atomickit.pc
 	(umask 022; mkdir -p ${DESTDIR}${PKGCONFIGDIR})
@@ -96,11 +96,11 @@ install-pkgconfig: atomickit.pc
 install-shared: shared
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})
 	install -m 755 libatomickit.so \
-	        ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
+		${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION}
 	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} \
-	        ${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
+		${DESTDIR}${LIBDIR}/libatomickit.so.${MAJOR}
 	ln -frs ${DESTDIR}${LIBDIR}/libatomickit.so.${VERSION} \
-	        ${DESTDIR}${LIBDIR}/libatomickit.so
+		${DESTDIR}${LIBDIR}/libatomickit.so
 
 install-static: static
 	(umask 022; mkdir -p ${DESTDIR}${LIBDIR})

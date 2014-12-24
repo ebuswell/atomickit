@@ -9,7 +9,7 @@
  * information.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * Copyright 2012 Linus Torvalds et al.
  *
  * This file is part of Atomic Kit.
@@ -59,7 +59,7 @@ extern void __AK_wrong_size(void)
 /* void */
 #define atomic_thread_fence(/* memory_order */ order)			\
 ({									\
-	switch(order)							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 		break;							\
 	case memory_order_consume:					\
@@ -77,7 +77,7 @@ extern void __AK_wrong_size(void)
 /* void */
 #define atomic_signal_fence(/* memory_order */ order)			\
 ({									\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 		break;							\
 	case memory_order_consume:					\
@@ -113,16 +113,16 @@ extern void __AK_wrong_size(void)
 
 #define __atomic_store_lock(object, desired)				\
 ({									\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		register volatile uint8_t dummy;			\
 		__asm__ __volatile__("xchgb %b1,%0"			\
-		                     : "=m" (*__ptr), "=q" (dummy)	\
-		                     : "1" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr), "=q" (dummy)	\
+				     : "1" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -131,9 +131,9 @@ extern void __AK_wrong_size(void)
 			(volatile uint16_t *) &(object)->__val;		\
 		register volatile uint16_t dummy;			\
 		__asm__ __volatile__("xchgw %w1,%0"			\
-		                     : "=m" (*__ptr), "=r" (dummy)	\
-		                     : "1" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr), "=r" (dummy)	\
+				     : "1" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -142,9 +142,9 @@ extern void __AK_wrong_size(void)
 			(volatile uint32_t *) &(object)->__val;		\
 		register volatile uint32_t dummy;			\
 		__asm__ __volatile__("xchgl %1,%0"			\
-		                     : "=m" (*__ptr), "=r" (dummy)	\
-		                     : "1" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr), "=r" (dummy)	\
+				     : "1" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -153,9 +153,9 @@ extern void __AK_wrong_size(void)
 			(volatile uint64_t *) &(object)->__val;		\
 		register volatile uint64_t dummy;			\
 		__asm__ __volatile__("xchgq %q1,%0"			\
-		                     : "=m" (*__ptr), "=r" (dummy)	\
-		                     : "1" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr), "=r" (dummy)	\
+				     : "1" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	default:							\
@@ -165,15 +165,15 @@ extern void __AK_wrong_size(void)
 
 #define __atomic_store(object, desired)					\
 ({									\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__("movb %b1,%0"			\
-		                     : "=m" (*__ptr)			\
-		                     : "q" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr)			\
+				     : "q" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -181,9 +181,9 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *) &(object)->__val;		\
 		__asm__ __volatile__("movw %w1,%0"			\
-		                     : "=m" (*__ptr)			\
-		                     : "r" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr)			\
+				     : "r" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -191,9 +191,9 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *) &(object)->__val;		\
 		__asm__ __volatile__("movl %1,%0"			\
-		                     : "=m" (*__ptr)			\
-		                     : "r" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr)			\
+				     : "r" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -201,9 +201,9 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__("movq %q1,%0"			\
-		                     : "=m" (*__ptr)			\
-		                     : "r" (desired)			\
-		                     : "memory");			\
+				     : "=m" (*__ptr)			\
+				     : "r" (desired)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	default:							\
@@ -213,10 +213,10 @@ extern void __AK_wrong_size(void)
 
 /* void */
 #define atomic_store_explicit(/* volatile A * */ object,		\
-                              /* C */ desired,				\
-                              /* memory_order */ order)			\
+			      /* C */ desired,				\
+			      /* memory_order */ order)			\
 ({									\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	{								\
 		/* This is the same as __atomic_store, but avoids the	\
@@ -240,15 +240,15 @@ extern void __AK_wrong_size(void)
 #define __atomic_load_lock(object)					\
 ({									\
 	__typeof__((object)->__val) __ret;				\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__("lock; xaddb %b0, %1"		\
-		                     : "=q" (__ret), "+m" (*__ptr)	\
-		                     : "0" (0)				\
-		                     : "memory", "cc");			\
+				     : "=q" (__ret), "+m" (*__ptr)	\
+				     : "0" (0)				\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -256,9 +256,9 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *) &(object)->__val;		\
 		__asm__ __volatile__("lock; xaddw %w0, %1"		\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (0)				\
-		                     : "memory", "cc");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (0)				\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -266,9 +266,9 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *) &(object)->__val;		\
 		__asm__ __volatile__("lock; xaddl %0, %1"		\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (0)				\
-		                     : "memory", "cc");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (0)				\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -276,9 +276,9 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__("lock; xaddq %q0, %1"		\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (0)				\
-		                     : "memory", "cc");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (0)				\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	default:							\
@@ -290,15 +290,15 @@ extern void __AK_wrong_size(void)
 #define __atomic_load(object)						\
 ({									\
 	__typeof__((object)->__val) __ret;				\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__("movb %1,%b0"			\
-		                     : "=q" (__ret)			\
-		                     : "m" (*__ptr)			\
-		                     : "memory");			\
+				     : "=q" (__ret)			\
+				     : "m" (*__ptr)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -306,9 +306,9 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *)&(object)->__val;		\
 		__asm__ __volatile__("movw %1,%w0"			\
-		                     : "=r" (__ret)			\
-		                     : "m" (*__ptr)			\
-		                     : "memory");			\
+				     : "=r" (__ret)			\
+				     : "m" (*__ptr)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -316,9 +316,9 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *) &(object)->__val;		\
 		__asm__ __volatile__("movl %1,%0"			\
-		                     : "=r" (__ret)			\
-		                     : "m" (*__ptr)			\
-		                     : "memory");			\
+				     : "=r" (__ret)			\
+				     : "m" (*__ptr)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -326,9 +326,9 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__("movq %1,%q0"			\
-		                     : "=r" (__ret)			\
-		                     : "m" (*__ptr)			\
-		                     : "memory");			\
+				     : "=r" (__ret)			\
+				     : "m" (*__ptr)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	default:							\
@@ -339,10 +339,10 @@ extern void __AK_wrong_size(void)
 
 /* C */
 #define atomic_load_explicit(/* volatile A * */ object,			\
-                             /* memory_order */ order)			\
+			     /* memory_order */ order)			\
 ({									\
 	__typeof__((object)->__val) __ret2;				\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	{								\
 		/* This is the same as __atomic_load, but avoids the	\
@@ -365,23 +365,22 @@ extern void __AK_wrong_size(void)
 })
 
 /*
- * Note: no "lock" prefix even on SMP: xchg always implies lock anyway.
- * Since this is generally used to protect other memory information, we
- * use "asm volatile" and "memory" clobbers to prevent gcc from moving
- * information around.
+ * Note: no "lock" prefix: xchg always implies lock anyway. Since this is
+ * generally used to protect other memory information, we use "asm volatile"
+ * and "memory" clobbers to prevent gcc from moving information around.
  */
 #define __atomic_exchange(object, desired)				\
 ({									\
 	__typeof__((object)->__val) __ret = (desired);			\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__("xchgb %b0,%1"			\
-		                     : "=q" (__ret), "+m" (*__ptr)	\
-		                     : "0" (__ret)			\
-		                     : "memory");			\
+				     : "=q" (__ret), "+m" (*__ptr)	\
+				     : "0" (__ret)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -389,9 +388,9 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *) &(object)->__val;		\
 		__asm__ __volatile__("xchgw %w0,%1"			\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (__ret)			\
-		                     : "memory");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (__ret)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -399,9 +398,9 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *) &(object)->__val;		\
 		__asm__ __volatile__("xchgl %0,%1"			\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (__ret)			\
-		                     : "memory");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (__ret)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -409,9 +408,9 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__("xchgq %q0,%1"			\
-		                     : "=r" (__ret), "+m" (*__ptr)	\
-		                     : "0" (__ret)			\
-		                     : "memory");			\
+				     : "=r" (__ret), "+m" (*__ptr)	\
+				     : "0" (__ret)			\
+				     : "memory");			\
 		break;							\
 	}								\
 	default:							\
@@ -422,11 +421,11 @@ extern void __AK_wrong_size(void)
 
 /* C */
 #define atomic_exchange_explicit(/* volatile A * */ object,		\
-                                 /* C */ desired,			\
-                                 /* memory_order */ order)		\
+				 /* C */ desired,			\
+				 /* memory_order */ order)		\
 ({									\
 	__typeof__((object)->__val) __ret2;				\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	case memory_order_consume:					\
 	case memory_order_acquire:					\
@@ -451,16 +450,16 @@ extern void __AK_wrong_size(void)
 	_Bool __ret;							\
 	__typeof__((object)->__val) *__old = (expected);		\
 	__typeof__((object)->__val) __new = (desired);			\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchgb %b3,%1; setz %2"	\
-		                     : "=a" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "q" (__new), "0" (*__old)	\
-		                     : "memory", "cc");			\
+				     : "=a" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "q" (__new), "0" (*__old)	\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -468,10 +467,10 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchgw %w3,%1; setz %2"	\
-		                     : "=a" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "r" (__new), "0" (*__old)	\
-		                     : "memory", "cc");			\
+				     : "=a" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "r" (__new), "0" (*__old)	\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -479,10 +478,10 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchgl %3,%1; setz %2"	\
-		                     : "=a" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "r" (__new), "0" (*__old)	\
-		                     : "memory", "cc");			\
+				     : "=a" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "r" (__new), "0" (*__old)	\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -490,10 +489,10 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchgq %q3,%1; setz %2"	\
-		                     : "=a" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "r" (__new), "0" (*__old)	\
-		                     : "memory", "cc");			\
+				     : "=a" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "r" (__new), "0" (*__old)	\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_DL:						\
@@ -510,25 +509,25 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__("xchgl %2, %%ebx;"			\
-		                     lock "cmpxchg8b %1;"		\
-		                     "movl %2, %%ebx;"			\
-		                     "setz %2"				\
-		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "2" ((uint32_t) __new2.i),	\
-		                       "c" ((uint32_t) __new2.i >> 32)	\
-		                       "0" (*__old2.i)			\
-		                     : "memory", "cc");			\
+				     lock "cmpxchg8b %1;"		\
+				     "movl %2, %%ebx;"			\
+				     "setz %2"				\
+				     : "=A" (*__old2.i), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "2" ((uint32_t) __new2.i),	\
+				       "c" ((uint32_t) __new2.i >> 32)	\
+				       "0" (*__old2.i)			\
+				     : "memory", "cc");			\
 #else									\
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchg8b %1; setz %2"	\
-		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "b" ((uint32_t) __new2.i),	\
-		                       "c" ((uint32_t) __new2.i >> 32)	\
-		                       "0" (*__old2.i)			\
-		                     : "memory", "cc");			\
+				     : "=A" (*__old2.i), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "b" ((uint32_t) __new2.i),	\
+				       "c" ((uint32_t) __new2.i >> 32)	\
+				       "0" (*__old2.i)			\
+				     : "memory", "cc");			\
 #endif									\
 		break;							\
 	}								\
@@ -546,25 +545,25 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile __uint128_t *) &(object)->__val;	\
 		__asm__ __volatile__("xchgq %2, %%rbx;"			\
-		                     lock "cmpxchg16b %1;"		\
-		                     "movq %2, %%rbx;"			\
-		                     "setz %2"				\
-		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "2" ((uint64_t) __new2.i),	\
-		                       "c" ((uint64_t) __new2.i >> 64)	\
-		                       "0" (*__old2.i)			\
-		                     : "memory", "cc");			\
+				     lock "cmpxchg16b %1;"		\
+				     "movq %2, %%rbx;"			\
+				     "setz %2"				\
+				     : "=A" (*__old2.i), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "2" ((uint64_t) __new2.i),	\
+				       "c" ((uint64_t) __new2.i >> 64)	\
+				       "0" (*__old2.i)			\
+				     : "memory", "cc");			\
 #else									\
 		volatile __uint128_t *__ptr =				\
 			(volatile __uint128_t *) &(object)->__val;	\
 		__asm__ __volatile__(lock "cmpxchg16b %1; setz %2"	\
-		                     : "=A" (*__old2.i), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "b" ((uint64_t) __new2.i),	\
-		                       "c" ((uint64_t) __new2.i >> 64)	\
-		                       "0" (*__old2.i)			\
-		                     : "memory", "cc");			\
+				     : "=A" (*__old2.i), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "b" ((uint64_t) __new2.i),	\
+				       "c" ((uint64_t) __new2.i >> 64)	\
+				       "0" (*__old2.i)			\
+				     : "memory", "cc");			\
 #endif									\
 		break;							\
 	}								\
@@ -576,24 +575,24 @@ extern void __AK_wrong_size(void)
 
 /* _Bool */
 #define atomic_compare_exchange_strong_explicit(/* volatile A * */ object,  \
-                                                /* C * */ expected,	    \
-                                                /* C */ desired,	    \
-                                                /* memory_order */ success, \
-                                                /* memory_order */ failure) \
+						/* C * */ expected,	    \
+						/* C */ desired,	    \
+						/* memory_order */ success, \
+						/* memory_order */ failure) \
 ({									    \
 	_Bool __ret2;							    \
-	switch((success)) {						    \
+	switch ((success)) {						    \
 	case memory_order_relaxed:					    \
 	case memory_order_consume:					    \
 	case memory_order_acquire:					    \
 	case memory_order_release:					    \
 	case memory_order_acq_rel:					    \
-		if((failure) == memory_order_seq_cst) {			    \
+		if ((failure) == memory_order_seq_cst) {		    \
 			__typeof__(expected) __expected = (expected);	    \
 			__typeof__(object) __object = (object);		    \
 			__ret2 = __atomic_compare_exchange(		    \
 				__object, __expected, (desired), "");	    \
-			if(!__ret2) {					    \
+			if (!__ret2) {					    \
 				*__expected = __atomic_load_lock(__object); \
 			}						    \
 		} else {						    \
@@ -612,10 +611,10 @@ extern void __AK_wrong_size(void)
 
 /* _Bool */
 #define atomic_compare_exchange_weak_explicit(/* volatile A * */ object,  \
-                                              /* C * */ expected,	  \
-                                              /* C */ desired,		  \
-                                              /* memory_order */ success, \
-                                              /* memory_order */ failure) \
+					      /* C * */ expected,	  \
+					      /* C */ desired,		  \
+					      /* memory_order */ success, \
+					      /* memory_order */ failure) \
 	atomic_compare_exchange_strong_explicit((object), (expected),	  \
 						(desired), (success),	  \
 						(failure))
@@ -624,15 +623,15 @@ extern void __AK_wrong_size(void)
 ({									\
 	__typeof__(operand) __operand = (operand);			\
 	__typeof__((object)->__val) __ret = (operand);			\
-	switch(sizeof((object)->__val)) {				\
+	switch (sizeof((object)->__val)) {				\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *) &(object)->__val;		\
 		__asm__ __volatile__ (lock "xaddb %b0, %1"		\
-		                      : "=q" (__ret), "+m" (*__ptr)	\
-		                      : "0" (__operand)			\
-		                      : "memory", "cc");		\
+				      : "=q" (__ret), "+m" (*__ptr)	\
+				      : "0" (__operand)			\
+				      : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -640,9 +639,9 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *)&(object)->__val;		\
 		__asm__ __volatile__ (lock "xaddw %w0, %1"		\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : "0" (__operand)			\
-		                      : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : "0" (__operand)			\
+				      : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -650,9 +649,9 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *)&(object)->__val;		\
 		__asm__ __volatile__ (lock "xaddl %0, %1"		\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : "0" (__operand)			\
-		                      : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : "0" (__operand)			\
+				      : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -660,9 +659,9 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *)&(object)->__val;		\
 		__asm__ __volatile__ (lock "xaddq %q0, %1"		\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : "0" (__operand)			\
-		                      : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : "0" (__operand)			\
+				      : "memory", "cc");		\
 		break;							\
 	}								\
 	default:							\
@@ -674,11 +673,11 @@ extern void __AK_wrong_size(void)
 
 /* C */
 #define atomic_fetch_add_explicit(/* volatile A * */ object,		\
-                                  /* M */ operand,			\
-                                  /* memory_order */ order)		\
+				  /* M */ operand,			\
+				  /* memory_order */ order)		\
 ({									\
 	__typeof__((object)->__val) __ret2;				\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	case memory_order_consume:					\
 	case memory_order_acquire:					\
@@ -689,21 +688,21 @@ extern void __AK_wrong_size(void)
 	case memory_order_seq_cst:					\
 	default:							\
 		__ret2 = __atomic_fetch_add((object), (operand),	\
-		                            "lock;");			\
+					    "lock;");			\
 	}								\
 	__ret2;								\
 })
 
 /* C */
 #define atomic_fetch_sub_explicit(/* volatile A * */ object,		\
-                                  /* M */ operand,			\
-                                  /* memory_order */ order)		\
+				  /* M */ operand,			\
+				  /* memory_order */ order)		\
 	atomic_fetch_add_explicit((object), -(operand), (order))
 
 /* C */
 #define atomic_fetch_or_explicit(/* volatile A * */ object,		\
-                                 /* M */ operand,			\
-                                 /* memory_order */ order)		\
+				 /* M */ operand,			\
+				 /* memory_order */ order)		\
 ({									\
 	__typeof__(object) __obj3 = (object);				\
 	__typeof__(operand) __operand = (operand);			\
@@ -713,7 +712,7 @@ extern void __AK_wrong_size(void)
 	__typeof__(__obj3->__val) __new3;				\
 	do {								\
 		__new3 = __ret3 | __operand;				\
-	} while(unlikely(						\
+	} while (unlikely(						\
 		!atomic_compare_exchange_weak_explicit(			\
 			__obj3, &__ret3, __new3, __order,		\
 			memory_order_relaxed)));			\
@@ -722,8 +721,8 @@ extern void __AK_wrong_size(void)
 
 /* C */
 #define atomic_fetch_xor_explicit(/* volatile A * */ object,		\
-                                  /* M */ operand,			\
-                                  /* memory_order */ order)		\
+				  /* M */ operand,			\
+				  /* memory_order */ order)		\
 ({									\
 	__typeof__(object) __obj3 = (object);				\
 	__typeof__(operand) __operand = (operand);			\
@@ -733,7 +732,7 @@ extern void __AK_wrong_size(void)
 	__typeof__(__obj3->__val) __new3;				\
 	do {								\
 		__new3 = __ret3 ^ __operand;				\
-	} while(unlikely(						\
+	} while (unlikely(						\
 		!atomic_compare_exchange_weak_explicit(			\
 			__obj3, &__ret3, __new3, __order,		\
 			memory_order_relaxed)));			\
@@ -742,8 +741,8 @@ extern void __AK_wrong_size(void)
 
 /* C */
 #define atomic_fetch_and_explicit(/* volatile A * */ object,		\
-                                  /* M */ operand,			\
-                                  /* memory_order */ order)		\
+				  /* M */ operand,			\
+				  /* memory_order */ order)		\
 ({									\
 	__typeof__(object) __obj3 = (object);				\
 	__typeof__(operand) __operand = (operand);			\
@@ -753,7 +752,7 @@ extern void __AK_wrong_size(void)
 	__typeof__(__obj3->__val) __new3;				\
 	do {								\
 		__new3 = __ret3 & __operand;				\
-	} while(unlikely(						\
+	} while (unlikely(						\
 		!atomic_compare_exchange_weak_explicit(			\
 			__obj3, &__ret3, __new3, __order,		\
 			memory_order_relaxed)));			\
@@ -763,14 +762,14 @@ extern void __AK_wrong_size(void)
 #define __atomic_flag_test_and_set(object, lock)			\
 ({									\
 	_Bool __ret;							\
-	switch(sizeof(_Bool)) {						\
+	switch (sizeof(_Bool)) {					\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "btsb $0, %1; setc %0"	\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_W:						\
@@ -778,8 +777,8 @@ extern void __AK_wrong_size(void)
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "btsw $0, %1; setc %0"	\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_L:						\
@@ -787,8 +786,8 @@ extern void __AK_wrong_size(void)
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "btsl $0, %1; setc %0"	\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : : "memory", "cc");		\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -796,8 +795,8 @@ extern void __AK_wrong_size(void)
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "btsq $0, %1; setc %0"	\
-		                      : "=r" (__ret), "+m" (*__ptr)	\
-		                      : : "memory", "cc");		\
+				      : "=r" (__ret), "+m" (*__ptr)	\
+				      : : "memory", "cc");		\
 		break;							\
 	}								\
 	default:							\
@@ -812,7 +811,7 @@ extern void __AK_wrong_size(void)
 	/* memory_order */ order)					\
 ({									\
 	_Bool __ret2;							\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	case memory_order_consume:					\
 	case memory_order_acquire:					\
@@ -829,38 +828,38 @@ extern void __AK_wrong_size(void)
 
 #define __atomic_flag_clear(object, lock)				\
 ({									\
-	switch(sizeof(_Bool)) {						\
+	switch (sizeof(_Bool)) {					\
 	case __X86_CASE_B:						\
 	{								\
 		volatile uint8_t *__ptr =				\
 			(volatile uint8_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "andb $0, %0"		\
-		                      : "+m" (*__ptr)			\
-		                      : : "memory", "cc");		\
+				      : "+m" (*__ptr)			\
+				      : : "memory", "cc");		\
 	}								\
 	case __X86_CASE_W:						\
 	{								\
 		volatile uint16_t *__ptr =				\
 			(volatile uint16_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "andw $0, %0"		\
-		                      : "+m" (*__ptr)			\
-		                      : : "memory", "cc");		\
+				      : "+m" (*__ptr)			\
+				      : : "memory", "cc");		\
 	}								\
 	case __X86_CASE_L:						\
 	{								\
 		volatile uint32_t *__ptr =				\
 			(volatile uint32_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "andl $0, %0"		\
-		                      : "+m" (*__ptr)			\
-		                      : : "memory", "cc");		\
+				      : "+m" (*__ptr)			\
+				      : : "memory", "cc");		\
 	}								\
 	case __X86_CASE_Q:						\
 	{								\
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *)&(object)->__flag;		\
 		__asm__ __volatile__ (lock "andq $0, %0"		\
-		                      : "+m" (*__ptr)			\
-		                      : : "memory", "cc");		\
+				      : "+m" (*__ptr)			\
+				      : : "memory", "cc");		\
 	}								\
 	default:							\
 		__AK_wrong_size();					\
@@ -869,9 +868,9 @@ extern void __AK_wrong_size(void)
 
 /* void */
 #define atomic_flag_clear_explicit(/* volatile atomic_flag * */ object,	\
-                                   /* memory_order */ order)		\
+				   /* memory_order */ order)		\
 ({									\
-	switch(order) {							\
+	switch (order) {						\
 	case memory_order_relaxed:					\
 	case memory_order_consume:					\
 	case memory_order_acquire:					\
@@ -901,17 +900,17 @@ extern void __AK_wrong_size(void)
 			uintptr_t hi;					\
 		} dsplit;						\
 	} __new = { .dval = (desired) };				\
-	switch(sizeof(uintptr_t)) {					\
+	switch (sizeof(uintptr_t)) {					\
 	case __X86_CASE_L:						\
 	{								\
 		volatile uint64_t *__ptr =				\
 			(volatile uint64_t *) &(object)->__val;		\
 		__asm__ __volatile__(lock "cmpxchg8b %1; setz %2"	\
-		                     : "=A" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "b" (__new.lo), "c" (__new.hi),	\
-		                       "0" (*__old)			\
-		                     : "memory", "cc");			\
+				     : "=A" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "b" (__new.lo), "c" (__new.hi),	\
+				       "0" (*__old)			\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	case __X86_CASE_Q:						\
@@ -919,11 +918,11 @@ extern void __AK_wrong_size(void)
 		volatile __int128_t *__ptr =				\
 			(volatile __int128_t *) &(object)->__val;	\
 		__asm__ __volatile__(lock "cmpxchg16b %1; setz %2"	\
-		                     : "=A" (*__old), "+m" (*__ptr),	\
-		                       "=r" (__ret)			\
-		                     : "b" (__new.lo), "c" (__new.hi),	\
-		                       "0" (*__old)			\
-		                     : "memory", "cc");			\
+				     : "=A" (*__old), "+m" (*__ptr),	\
+				       "=r" (__ret)			\
+				     : "b" (__new.lo), "c" (__new.hi),	\
+				       "0" (*__old)			\
+				     : "memory", "cc");			\
 		break;							\
 	}								\
 	default:							\
@@ -934,11 +933,11 @@ extern void __AK_wrong_size(void)
 
 /* _Bool */
 #define ak_dcas(/* volatile A * */ object,				\
-                /* C * */ expected, /* C */ desired,			\
-                /* memory_order */ success, /* memory_order */ failure) \
+		/* C * */ expected, /* C */ desired,			\
+		/* memory_order */ success, /* memory_order */ failure) \
 ({									\
 	_Bool __ret2;							\
-	switch((success)) {						\
+	switch ((success)) {						\
 	case memory_order_relaxed:					\
 	case memory_order_consume:					\
 	case memory_order_acquire:					\
@@ -956,8 +955,8 @@ extern void __AK_wrong_size(void)
 
 /* _Bool */
 #define ak_dcas_strong(/* volatile A * */ object, /* C * */ expected,	\
-                       /* C */ desired, /* memory_order */ success,	\
-                       /* memory_order */ failure)			\
+		       /* C */ desired, /* memory_order */ success,	\
+		       /* memory_order */ failure)			\
 	ak_dcas((object), (expected), (desired), (success), (failure))
 
 #endif /* ! ATOMICKIT_ARCH_ATOMIC_H */

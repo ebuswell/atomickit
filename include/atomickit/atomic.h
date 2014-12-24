@@ -5,7 +5,7 @@
  * have to maintain any of this crap?
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * Copyright 2012 Linus Torvalds et al.
  *
  * This file incorporates code from arch/x86/include/compiler.h plus some
@@ -35,8 +35,8 @@
  *                      The Regents of the University of California.
  *   All rights reserved.
  *  
- *   This code is derived from software contributed to Berkeley by
- *   Berkeley Software Design, Inc.
+ *   This code is derived from software contributed to Berkeley by Berkeley
+ *   Software Design, Inc.
  * 
  *   Redistribution and use in source and binary forms, with or without
  *   modification, are permitted provided that the following conditions are
@@ -72,16 +72,16 @@
 #ifndef __has_extension
 # define __has_extension	__has_feature
 #endif
-#ifndef	__has_feature
+#ifndef __has_feature
 # define __has_feature(x)	0
 #endif
-#ifndef	__has_include
+#ifndef __has_include
 # define __has_include(x)	0
 #endif
-#ifndef	__has_builtin
+#ifndef __has_builtin
 # define __has_builtin(x)	0
 #endif
-#ifndef	__has_attribute
+#ifndef __has_attribute
 # define __has_attribute(x)	0
 #endif
 
@@ -96,8 +96,8 @@
 #endif
 
 #ifndef __CLANG_ATOMICS
-/* No native support for _Atomic(). Place object in structure to
- * prevent most forms of direct non-atomic access. */
+/* No native support for _Atomic(). Place object in structure to prevent most
+ * forms of direct non-atomic access. */
 # define _Atomic(T)	struct { T volatile __val; }
 #endif
 
@@ -262,11 +262,11 @@ typedef _Atomic(uintmax_t)		atomic_uintmax_t;
 # define atomic_compare_exchange_strong_explicit(object, expected, desired \
                                                  success, failure)	   \
 	__c11_atomic_compare_exchange_strong(object, expected, desired,	   \
-	                                     success, failure)
+					     success, failure)
 # define atomic_compare_exchange_weak_explicit(object, expected, desired \
-                                               success, failure)	 \
+					       success, failure)	 \
 	__c11_atomic_compare_exchange_weak(object, expected, desired,	 \
-                                           success, failure)
+					   success, failure)
 # define atomic_exchange_explicit(object, desired, order)		\
 	__c11_atomic_exchange(object, desired, order)
 # define atomic_fetch_add_explicit(object, operand, order)		\
@@ -285,13 +285,13 @@ typedef _Atomic(uintmax_t)		atomic_uintmax_t;
 	__c11_atomic_store(object, desired, order)
 #elif defined(__GNUC_ATOMICS)
 # define atomic_compare_exchange_strong_explicit(object, expected, desired, \
-                                                 success, failure)	    \
+						 success, failure)	    \
 	__atomic_compare_exchange_n(&(object)->__val, expected, desired,    \
-	                            0, success, failure)
+				    0, success, failure)
 # define atomic_compare_exchange_weak_explicit(object, expected, desired,  \
-                                               success, failure)	   \
+					       success, failure)	   \
 	__atomic_compare_exchange_n(&(object)->__val, expected, desired, \
-	                            1, success, failure)
+				    1, success, failure)
 # define atomic_exchange_explicit(object, desired, order)		\
 	__atomic_exchange_n(&(object)->__val, desired, order)
 # define atomic_fetch_add_explicit(object, operand, order)		\
@@ -348,12 +348,12 @@ typedef struct {
 
 #define atomic_compare_exchange_strong(object, expected, desired)	   \
 	atomic_compare_exchange_strong_explicit(object, expected, desired, \
-	                                        memory_order_seq_cst,	   \
-	                                        memory_order_seq_cst)
+						memory_order_seq_cst,	   \
+						memory_order_seq_cst)
 #define atomic_compare_exchange_weak(object, expected, desired)		 \
 	atomic_compare_exchange_weak_explicit(object, expected, desired, \
-	                                      memory_order_seq_cst,	 \
-	                                      memory_order_seq_cst)
+					      memory_order_seq_cst,	 \
+					      memory_order_seq_cst)
 #define atomic_exchange(object, desired)				\
 	atomic_exchange_explicit(object, desired, memory_order_seq_cst)
 #define atomic_fetch_add(object, operand)				 \
@@ -397,93 +397,94 @@ typedef struct {
 /**
  * Convenience abbreviation for memory_order_relaxed.
  */
-#define mo_relaxed memory_order_relaxed
+#define mo_relaxed	memory_order_relaxed
 /**
  * Convenience abbreviation for memory_order_consume.
  */
-#define mo_consume memory_order_consume
+#define mo_consume	memory_order_consume
 /**
  * Convenience abbreviation for memory_order_acquire.
  */
-#define mo_acquire memory_order_acquire
+#define mo_acquire	memory_order_acquire
 /**
  * Convenience abbreviation for memory_order_release.
  */
-#define mo_release memory_order_release
+#define mo_release	memory_order_release
 /**
  * Convenience abbreviation for memory_order_acq_rel.
  */
-#define mo_acq_rel memory_order_acq_rel
+#define mo_acq_rel	memory_order_acq_rel
 /**
  * Convenience abbreviation for memory_order_seq_cst.
  */
-#define mo_seq_cst memory_order_seq_cst
+#define mo_seq_cst	memory_order_seq_cst
 
 /**
  * Convenience abbreviation for atomic_thread_fence.
  */
-#define ak_fence atomic_thread_fence
+#define ak_fence	atomic_thread_fence
 /**
  * Convenience abbreviateion for atomic_signal_fence.
  */
-#define ak_sigfence atomic_signal_fence
+#define ak_sigfence	atomic_signal_fence
 /**
  * Convenience abbreviateion for atomic_is_lock_free.
  */
-#define ak_is_nb atomic_is_lock_free
+#define ak_is_nb	atomic_is_lock_free
 /**
  * Convenience abbreviation for atomic_init.
  */
-#define ak_init atomic_init
+#define ak_init		atomic_init
 /**
  * Convenience abbreviation for atomic_store_explicit.
  */
-#define ak_store atomic_store_explicit
+#define ak_store	atomic_store_explicit
 /**
  * Convenience abbreviation for atomic_load_explicit.
  */
-#define ak_load atomic_load_explicit
+#define ak_load		atomic_load_explicit
 /**
  * Convenience abbreviation for atomic_compare_exchange_weak_explicit.
  */
-#define ak_cas atomic_compare_exchange_weak_explicit
+#define ak_cas		atomic_compare_exchange_weak_explicit
 /**
  * Convenience abbreviation for atomic_compare_exchange_strong_explicit.
  */
-#define ak_cas_strong atomic_compare_exchange_strong_explicit
+#define ak_cas_strong	atomic_compare_exchange_strong_explicit
 /**
  * Convenience abbreviation for atomic_exchange_explicit.
  */
-#define ak_swap atomic_exchange_explicit
+#define ak_swap		atomic_exchange_explicit
 /**
  * Convenience abbreviation for atomic_fetch_add_explicit.
  */
-#define ak_ldadd atomic_fetch_add_explicit
+#define ak_ldadd	atomic_fetch_add_explicit
 /**
  * Convenience abbreviation for atomic_fetch_sub_explicit.
  */
-#define ak_ldsub atomic_fetch_sub_explicit
+#define ak_ldsub	atomic_fetch_sub_explicit
 /**
  * Convenience abbreviation for atomic_fetch_or_explicit.
  */
-#define ak_ldor atomic_fetch_or_explicit
+#define ak_ldor		atomic_fetch_or_explicit
 /**
  * Convenience abbreviation for atomic_fetch_xor_explicit.
  */
-#define ak_ldxor atomic_fetch_xor_explicit
+#define ak_ldxor	atomic_fetch_xor_explicit
 /**
  * Convenience abbreviation for atomic_fetch_and_explicit.
  */
-#define ak_ldand atomic_fetch_and_explicit
+#define ak_ldand	atomic_fetch_and_explicit
 /**
  * Convenience abbreviation for atomic_flag_test_and_set_explicit.
  */
-#define aflag_ts atomic_flag_test_and_set_explicit
+#define aflag_ts	atomic_flag_test_and_set_explicit
 /**
  * Convenience abbreviation for atomic_store_explicit.
  */
-#define aflag_clear atomic_flag_clear_explicit
+#define aflag_clear	atomic_flag_clear_explicit
 
+/* For cpu_yield() */
 #include <atomickit/arch/misc.h>
 
 #endif /* ! ATOMICKIT_ATOMIC_H */

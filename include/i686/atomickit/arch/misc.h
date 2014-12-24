@@ -4,7 +4,7 @@
  * Gives us cpu_yield()
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * Copyright 2013 Linus Torvalds et al.
  *
  * This file is part of Atomic Kit.

@@ -3,8 +3,8 @@
  *
  * A copy-on-write dictionary, where the key is always an astr. This is less
  * limiting than it might be, as astr is designed to be a binary-safe string
- * (i.e. it can contain '\0'). As a result, any binary value can be used as the
- * key, provided it is first wrapped in an astr.
+ * (i.e. it can contain '\0'). As a result, any binary value can be used as
+ * the key, provided it is first wrapped in an astr.
  *
  * Although NULL may be a valid value for a dictionary key, this is also
  * returned by fetch functions when the key cannot be found. To distinguish
@@ -12,7 +12,7 @@
  * function and then check if it has been set to EINVAL.
  */
 /*
- * Copyright 2013 Evan Buswell
+ * Copyright 2014 Evan Buswell
  * 
  * This file is part of Atomic Kit.
  * 
@@ -25,8 +25,8 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  * 
- * You should have received a copy of the GNU General Public License along with
- * Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
+ * You should have received a copy of the GNU General Public License along
+ * with Atomic Kit.  If not, see <http://www.gnu.org/licenses/>.
  */
 #ifndef ATOMICKIT_DICT_H
 #define ATOMICKIT_DICT_H 1
@@ -40,8 +40,8 @@
  */
 /* define this first so that adict can be an array of these */
 struct adict_entry {
-	struct astr *key; /**< the key for this entry */
-	struct arcp_region *value; /**< the value for this entry */
+	struct astr *key;		/**< the key for this entry */
+	struct arcp_region *value;	/**< the value for this entry */
 };
 
 /**
@@ -51,9 +51,10 @@ struct adict_entry {
  */
 struct adict {
 	struct arcp_region;
-	size_t len; /**< The number of entries in this dictionary */
-	struct adict_entry items[]; /**< a sorted array of the entries in this
-	                             *   dictionary. */
+	size_t len;			/**< The number of entries in this
+					 *   dictionary */
+	struct adict_entry items[];	/**< a sorted array of the entries in
+					 *   this dictionary. */
 };
 
 /**
@@ -81,7 +82,8 @@ struct adict *adict_dup(struct adict *dict);
 /**
  * Create an empty dictionary.
  *
- * @returns the new dictionary, or NULL if the dictionary could not be created.
+ * @returns the new dictionary, or NULL if the dictionary could not be
+ * created.
  */
 struct adict *adict_create(void);
 
@@ -127,8 +129,8 @@ struct arcp_region *adict_cstrget(struct adict *dict, char *key);
 bool adict_has(struct adict *dict, struct astr *key);
 
 /**
- * Checks if a dictionary contains an entry for the specified key, using a cstr
- * key.
+ * Checks if a dictionary contains an entry for the specified key, using a
+ * cstr key.
  *
  * This is a convenience to not have to create an astr.
  *
@@ -149,7 +151,7 @@ bool adict_cstrhas(struct adict *dict, char *key);
  * @returns the new dictionary.
  */
 struct adict *adict_put(struct adict *dict,
-                        struct astr *key, struct arcp_region *value);
+			struct astr *key, struct arcp_region *value);
 
 /**
  * Duplicate the dictionary and set the value for the given key.
@@ -160,7 +162,7 @@ struct adict *adict_put(struct adict *dict,
  * @returns the duplicated dictionary.
  */
 struct adict *adict_dup_put(struct adict *dict,
-                            struct astr *key, struct arcp_region *value);
+			    struct astr *key, struct arcp_region *value);
 
 /**
  * Set the value for the given key, using a cstr key.
@@ -175,7 +177,7 @@ struct adict *adict_dup_put(struct adict *dict,
  * @returns the new dictionary.
  */
 struct adict *adict_cstrput(struct adict *dict,
-                            char *key, struct arcp_region *value);
+			    char *key, struct arcp_region *value);
 
 /**
  * Duplicate the dictionary and set the value for the given key, using a cstr
@@ -191,7 +193,7 @@ struct adict *adict_cstrput(struct adict *dict,
  * @returns the duplicated dictionary.
  */
 struct adict *adict_dup_cstrput(struct adict *dict,
-                                char *key, struct arcp_region *value);
+				char *key, struct arcp_region *value);
 
 /**
  * Create a dictionary with the value for the given key.
